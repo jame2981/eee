@@ -49,8 +49,33 @@ export async function installEnvironment(config: EnvironmentConfig) {
     logger.info(`\\n[${current}/${total}] 🔧 正在安装: ${pkg}`);
 
     try {
-      const installPath = `./pkgs/${pkg}/install.ts`;
-      await $`bun ${installPath}`;
+      // 动态导入并执行安装模块
+      const installModule = await import(`../pkgs/${pkg}/install.ts`);
+      const installFunction = installModule.default;
+
+      if (typeof installFunction !== 'function') {
+        throw new Error(`${pkg}/install.ts 没有导出默认函数`);
+      }
+
+      await installFunction();
+
+      // 如果存在 post_install.ts，也执行它
+      try {
+        const postInstallModule = await import(`../pkgs/${pkg}/post_install.ts`);
+        const postInstallFunction = postInstallModule.default;
+
+        if (typeof postInstallFunction === 'function') {
+          await postInstallFunction();
+        }
+      } catch (postError) {
+        // post_install.ts 是可选的，如果不存在就忽略
+        if (postError.message.includes('Cannot resolve module') || postError.message.includes('Cannot find module')) {
+          // 文件不存在，忽略
+        } else {
+          logger.warn(`⚠️ ${pkg} 后置配置失败: ${postError.message}`);
+        }
+      }
+
       logger.success(`✅ ${pkg} 安装完成`);
     } catch (error) {
       logger.error(`❌ ${pkg} 安装失败:`, error);

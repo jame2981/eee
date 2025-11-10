@@ -150,20 +150,36 @@ sudo bun env/coding.ts    # 开发环境 (推荐)
 | **🖥️ 服务器环境** | `sudo bun env/server.ts` | 生产运行时 (5个包) | 生产部署、CI/CD |
 | **⚡ 最小化环境** | `sudo bun env/minimal.ts` | 基础工具 (2个包) | 容器镜像、资源受限 |
 
-### 🔧 单独安装软件包
+### 🔧 自定义环境配置
 
+如需安装特定软件包组合，请创建自定义环境文件：
+
+```typescript
+// env/custom.ts
+import { installEnvironment } from "@/installer";
+
+const customEnvironment = {
+  name: "自定义环境",
+  description: "按需选择的软件包组合",
+  packages: [
+    "apt-base",        // 必需：系统包更新
+    "python3.13",      // Python 开发环境
+    "docker",          // Docker 容器环境
+    "nodejs22"         // Node.js 开发环境
+  ]
+};
+
+if (import.meta.main) {
+  installEnvironment(customEnvironment).catch(err => {
+    console.error("安装过程中发生严重错误:", err);
+    process.exit(1);
+  });
+}
+```
+
+然后执行：
 ```bash
-# Python 开发环境
-sudo bun pkgs/python3.13/install.ts
-
-# Docker 容器环境
-sudo bun pkgs/docker/install.ts
-
-# Node.js 开发环境
-sudo bun pkgs/nodejs22/install.ts
-
-# Go 开发环境
-sudo bun pkgs/golang1.24/install.ts
+sudo bun env/custom.ts
 ```
 
 ---

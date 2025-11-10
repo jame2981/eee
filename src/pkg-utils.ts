@@ -10,6 +10,18 @@
 import { $ } from "bun";
 import { logger } from "@/logger";
 
+// ========== APT 环境配置 ==========
+
+/**
+ * APT 统一环境变量配置
+ * - APT_LISTCHANGES_FRONTEND=none: 禁用 apt 命令警告
+ * - DEBIAN_FRONTEND=noninteractive: 非交互式安装
+ */
+const APT_ENV = {
+  APT_LISTCHANGES_FRONTEND: "none",
+  DEBIAN_FRONTEND: "noninteractive"
+};
+
 // ==========  1. 用户环境管理  ==========
 
 export interface UserEnv {
@@ -51,7 +63,14 @@ export function getUserHome(user?: string): string {
  */
 export async function _aptUpdate(): Promise<void> {
   logger.info("==> 更新包索引...");
-  await $`apt-get update -qq`;
+  await $`APT_LISTCHANGES_FRONTEND=none apt update -qq`;
+}
+
+/**
+ * 公共的APT更新函数
+ */
+export async function aptUpdate(): Promise<void> {
+  await _aptUpdate();
 }
 
 /**
@@ -62,7 +81,7 @@ export async function aptInstall(packages: string | string[]): Promise<void> {
   logger.info(`==> 安装包: ${pkgList.join(", ")}`);
 
   for (const pkg of pkgList) {
-    await $`DEBIAN_FRONTEND=noninteractive apt-get install -y ${pkg}`;
+    await $`APT_LISTCHANGES_FRONTEND=none DEBIAN_FRONTEND=noninteractive apt install -y ${pkg}`;
   }
 }
 
@@ -73,7 +92,7 @@ export async function aptRemove(packages: string | string[]): Promise<void> {
   const pkgList = Array.isArray(packages) ? packages : [packages];
   logger.info(`==> 移除包: ${pkgList.join(", ")}`);
 
-  await $`apt-get remove -y ${pkgList.join(" ")} || true`;
+  await $`APT_LISTCHANGES_FRONTEND=none apt remove -y ${pkgList.join(" ")} || true`;
 }
 
 /**
@@ -270,7 +289,7 @@ export async function createBinSymlink(binPath: string, binName: string): Promis
  */
 export async function verifyCommand(command: string): Promise<boolean> {
   try {
-    await $`command -v ${command}`;
+    await $`which ${command}`;
     return true;
   } catch {
     return false;
@@ -293,7 +312,7 @@ export async function getCommandVersion(command: string, versionFlag = "--versio
  */
 export async function testUserCommand(command: string, user?: string): Promise<boolean> {
   try {
-    await runAsUser(`command -v ${command}`, user);
+    await runAsUser(`which ${command}`, user);
     return true;
   } catch {
     return false;
@@ -508,7 +527,7 @@ export async function detectArch(): Promise<string> {
  */
 export async function detectPackageManager(): Promise<string> {
   const managers = [
-    { cmd: "apt-get", name: "apt" },
+    { cmd: "apt", name: "apt" },
     { cmd: "yum", name: "yum" },
     { cmd: "dnf", name: "dnf" },
     { cmd: "pacman", name: "pacman" },
@@ -709,4 +728,35 @@ export async function installAptPackage(
     logger.error(`❌ ${packageName} APT 安装失败: ${error.message}`);
     throw error;
   }
+}
+
+// ========== 13. 简单重复逻辑提取 ==========
+
+/**
+ * 批量安装包并处理错误（用于可选包）
+ */
+export async function installPackagesWithFallback(
+  packages: string[],
+  packageManager: string,
+  user?: string
+): Promise<{ success: string[], failed: string[] }> {
+  const targetUser = user || getCurrentUser();
+  const results = { success: [], failed: [] };
+
+  for (const pkg of packages) {
+    try {
+      const cmd = packageManager.includes('${package}')
+        ? packageManager.replace('${package}', pkg)
+        : `${packageManager} ${pkg}`;
+
+      await runAsUser(cmd, targetUser);
+      results.success.push(pkg);
+      logger.success(`  ✓ ${pkg} 安装成功`);
+    } catch (error) {
+      results.failed.push(pkg);
+      logger.warn(`  ⚠️ ${pkg} 安装失败: ${error.message}`);
+    }
+  }
+
+  return results;
 }

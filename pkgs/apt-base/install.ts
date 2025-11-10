@@ -7,7 +7,7 @@
  */
 
 import { $ } from "bun";
-import { _aptUpdate } from "@/pkg-utils";
+import { _aptUpdate, aptInstall } from "@/pkg-utils";
 import { logger } from "@/logger";
 
 export default async function install(): Promise<void> {
@@ -17,9 +17,13 @@ export default async function install(): Promise<void> {
     // 更新包索引
     await _aptUpdate();
 
+    // 安装 apt-utils 以消除 debconf 警告
+    logger.info("==> 安装 apt-utils...");
+    await aptInstall("apt-utils");
+
     // 升级所有包
     logger.info("==> 升级系统包...");
-    await $`DEBIAN_FRONTEND=noninteractive apt-get upgrade -y`;
+    await $`APT_LISTCHANGES_FRONTEND=none DEBIAN_FRONTEND=noninteractive apt upgrade -y`;
 
     logger.success("✅ 系统包更新和升级完成!");
 

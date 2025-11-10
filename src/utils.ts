@@ -33,7 +33,7 @@ export async function checkIfInstalled(checkCommand: string): Promise<boolean> {
 }
 
 export async function installAptPackage(packageName: string, sudo: boolean): Promise<void> {
-  await run('apt-get', ['install', '-y', packageName], { sudo });
+  await run('apt', ['install', '-y', packageName], { sudo });
 }
 
 export async function installFlatpakPackage(packageName:string, sudo: boolean): Promise<void> {
