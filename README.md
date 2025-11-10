@@ -119,7 +119,7 @@ graph TD
 ## 🚀 快速开始
 
 ### 📋 环境要求
-- ✅ **Linux** (Ubuntu 20.04+, Debian 11+, WSL2)
+- ✅ **Linux** (Ubuntu 24+, Debian 11+, WSL2)
 - ✅ **Bun** 1.0+ (JavaScript 运行时)
 - ✅ **Root 权限** (用于系统包安装)
 
@@ -130,7 +130,7 @@ graph TD
 curl -fsSL https://bun.sh/install | bash
 
 # 2. 克隆项目
-git clone https://github.com/your-org/eee.git
+git clone https://github.com/jame2981/eee.git
 cd eee
 
 # 3. 安装依赖 (如果有)
@@ -421,8 +421,8 @@ if (import.meta.main) {
 4. 使用 `sudo bun env/myenv.ts` 执行
 
 ### 🐛 报告问题
-- 🔍 [搜索现有 Issues](https://github.com/your-org/eee/issues)
-- 🆕 [创建新 Issue](https://github.com/your-org/eee/issues/new)
+- 🔍 [搜索现有 Issues](https://github.com/jame2981/eee/issues)
+- 🆕 [创建新 Issue](https://github.com/jame2981/eee/issues/new)
 - 📋 提供详细的系统信息和错误日志
 
 ---
@@ -443,10 +443,8 @@ if (import.meta.main) {
 
 ## 📞 联系我们
 
-- 🐛 **Issues**: [GitHub Issues](https://github.com/your-org/eee/issues)
-- 💬 **讨论**: [GitHub Discussions](https://github.com/your-org/eee/discussions)
-- 📧 **邮箱**: [eee-dev@your-org.com](mailto:eee-dev@your-org.com)
-- 🐦 **Twitter**: [@EEE_DevTools](https://twitter.com/EEE_DevTools)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/jame2981/eee/issues)
+- 💬 **讨论**: [GitHub Discussions](https://github.com/jame2981/eee/discussions)
 
 ---
 
@@ -456,7 +454,7 @@ if (import.meta.main) {
 
 **让 Linux 开发环境配置变得 Environment, Efficient, Enjoy！**
 
-[![Star History Chart](https://api.star-history.com/svg?repos=your-org/eee&type=Date)](https://star-history.com/#your-org/eee&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=jame2981/eee&type=Date)](https://star-history.com/#jame2981/eee&Date)
 
 ---
 
