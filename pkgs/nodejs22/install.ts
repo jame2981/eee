@@ -42,25 +42,61 @@ export default async function install(): Promise<void> {
     // 2. 安装 Node.js 22
     logger.info("==> 使用 NVM 安装 Node.js 22...");
 
-    const nodeInstallScript = `
-      export NVM_DIR='${nvmDir}'
-      [ -s '$NVM_DIR/nvm.sh' ] && source '$NVM_DIR/nvm.sh'
+    const nodeInstallScript = `#!/bin/bash
+      # NVM Node.js 安装脚本 - 强制使用 bash
+      set -e  # 遇到错误立即退出
 
-      echo "==> 检查是否已安装 Node.js 22"
-      if nvm list | grep -q "v22"; then
-        echo "==> Node.js 22 已安装，设置为默认版本"
+      echo "==> 开始 Node.js 安装"
+
+      # 环境变量设置
+      export NVM_DIR='${nvmDir}'
+      echo "==> NVM目录: $NVM_DIR"
+
+      # 验证 NVM 安装
+      if [ ! -d "$NVM_DIR" ]; then
+        echo "❌ NVM 目录不存在: $NVM_DIR"
+        exit 1
+      fi
+
+      if [ ! -f "$NVM_DIR/nvm.sh" ]; then
+        echo "❌ NVM 脚本不存在: $NVM_DIR/nvm.sh"
+        exit 1
+      fi
+
+      # 加载 NVM - 关键步骤
+      echo "==> 加载 NVM 环境"
+      . "$NVM_DIR/nvm.sh"
+
+      # 验证 NVM 是否可用
+      if ! command -v nvm >/dev/null 2>&1; then
+        echo "❌ NVM 命令不可用"
+        exit 127
+      fi
+
+      echo "✅ NVM 加载成功: $(nvm --version)"
+
+      # Node.js 安装逻辑
+      echo "==> 检查 Node.js 22 安装状态"
+      if nvm ls 22 >/dev/null 2>&1; then
+        echo "✅ Node.js 22 已安装"
         nvm use 22
-        nvm alias default 22
       else
         echo "==> 安装 Node.js 22"
         nvm install 22
         nvm use 22
-        nvm alias default 22
       fi
 
-      echo "==> 验证 Node.js 安装"
-      node --version
-      npm --version
+      # 设置默认版本
+      nvm alias default 22
+
+      # 验证安装
+      echo "==> 验证 Node.js 和 npm"
+      node_version=$(node --version)
+      npm_version=$(npm --version)
+
+      echo "✅ Node.js: $node_version"
+      echo "✅ npm: $npm_version"
+      echo "✅ Node.js 22 安装完成"
     `;
 
     try {

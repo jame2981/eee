@@ -248,28 +248,39 @@ export async function runAsUser(command: string, user?: string): Promise<string>
 
 /**
  * 以指定用户身份执行脚本
- * 修复: 正确处理多行脚本的引用，增加调试日志
+ * 修复: 使用 here document 避免引用问题，增加调试日志
  */
 export async function runAsUserScript(script: string, user?: string): Promise<string> {
   const targetUser = user || getCurrentUser();
-
-  // 确保脚本被正确引用，避免shell解析问题
-  const quotedScript = script.replace(/'/g, "'\"'\"'");
 
   logger.info(`==> 调试: runAsUserScript - 目标用户: ${targetUser}`);
   logger.info(`==> 调试: runAsUserScript - 脚本长度: ${script.length} 字符`);
 
   try {
     let result: string;
-    if (targetUser === "root") {
-      logger.info("==> 调试: 以root用户执行脚本");
-      result = await $`bash -c '${quotedScript}'`.text();
-    } else {
-      logger.info(`==> 调试: 以sudo -u ${targetUser}执行脚本`);
-      result = await $`sudo -u ${targetUser} bash -c '${quotedScript}'`.text();
+
+    // 将脚本写入临时文件
+    const tmpFile = `/tmp/script-${Date.now()}.sh`;
+    await Bun.write(tmpFile, script);
+    await $`chmod +x ${tmpFile}`;
+
+    try {
+      if (targetUser === "root") {
+        logger.info("==> 调试: 以root用户执行脚本");
+        result = await $`bash ${tmpFile}`.text();
+      } else {
+        logger.info(`==> 调试: 以sudo -u ${targetUser}执行脚本`);
+        result = await $`sudo -u ${targetUser} bash ${tmpFile}`.text();
+      }
+    } finally {
+      // 清理临时文件
+      await $`rm -f ${tmpFile}`.nothrow();
     }
 
     logger.info(`==> 调试: runAsUserScript - 脚本执行成功，输出长度: ${result.length} 字符`);
+    if (result.length > 0) {
+      logger.info(`==> 调试: runAsUserScript - 前100字符: ${result.substring(0, 100)}`);
+    }
     return result;
   } catch (error) {
     logger.error(`==> 调试: runAsUserScript - 脚本执行失败: ${error.message}`);
