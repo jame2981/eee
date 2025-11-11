@@ -49,8 +49,8 @@ export async function installEnvironment(config: EnvironmentConfig) {
     logger.info(`\\n[${current}/${total}] 🔧 正在安装: ${pkg}`);
 
     try {
-      // 动态导入并执行安装模块
-      const installModule = await import(`../pkgs/${pkg}/install.ts`);
+      // 动态导入并执行安装模块 - 使用绝对路径避免相对路径解析问题
+      const installModule = await import(`${process.cwd()}/pkgs/${pkg}/install.ts`);
       const installFunction = installModule.default;
 
       if (typeof installFunction !== 'function') {
@@ -61,7 +61,7 @@ export async function installEnvironment(config: EnvironmentConfig) {
 
       // 如果存在 post_install.ts，也执行它
       try {
-        const postInstallModule = await import(`../pkgs/${pkg}/post_install.ts`);
+        const postInstallModule = await import(`${process.cwd()}/pkgs/${pkg}/post_install.ts`);
         const postInstallFunction = postInstallModule.default;
 
         if (typeof postInstallFunction === 'function') {
