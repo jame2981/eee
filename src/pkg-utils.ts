@@ -61,6 +61,22 @@ export function getCurrentUser(): string {
 }
 
 /**
+ * 获取指定用户的主组名
+ */
+export async function getUserPrimaryGroup(user?: string): Promise<string> {
+  const targetUser = user || getCurrentUser();
+
+  try {
+    // 使用 id -gn 命令获取用户的主组名
+    const groupName = await $`id -gn ${targetUser}`.text();
+    return groupName.trim();
+  } catch (error) {
+    logger.warn(`⚠️ 无法获取用户 ${targetUser} 的主组，使用用户名作为组名: ${error.message}`);
+    return targetUser;
+  }
+}
+
+/**
  * 获取用户主目录
  */
 export function getUserHome(user?: string): string {
@@ -479,7 +495,10 @@ export async function setUserOwnership(path: string, user?: string): Promise<voi
   const targetUser = user || getCurrentUser();
 
   if (targetUser !== "root") {
-    await $`chown -R ${targetUser}:${targetUser} ${path}`;
+    // 获取用户的主组名，而不是假设用户名等于组名
+    const primaryGroup = await getUserPrimaryGroup(targetUser);
+    await $`chown -R ${targetUser}:${primaryGroup} ${path}`;
+    logger.info(`==> 设置文件所有权: ${path} -> ${targetUser}:${primaryGroup}`);
   }
 }
 
