@@ -161,7 +161,13 @@ export async function reloadEnv(user?: string): Promise<void> {
  */
 export async function _aptUpdate(): Promise<void> {
   logger.info("==> 更新包索引...");
-  await $`APT_LISTCHANGES_FRONTEND=none apt-get update -qq`;
+
+  const updateScript = `set -e
+export APT_LISTCHANGES_FRONTEND=none
+
+apt-get update -qq`;
+
+  await runAsRootScript(updateScript);
 }
 
 /**
@@ -178,9 +184,13 @@ export async function aptInstall(packages: string | string[]): Promise<void> {
   const pkgList = Array.isArray(packages) ? packages : [packages];
   logger.info(`==> 安装包: ${pkgList.join(", ")}`);
 
-  for (const pkg of pkgList) {
-    await $`APT_LISTCHANGES_FRONTEND=none DEBIAN_FRONTEND=noninteractive apt-get install -y ${pkg}`;
-  }
+  const installScript = `set -e
+export APT_LISTCHANGES_FRONTEND=none
+export DEBIAN_FRONTEND=noninteractive
+
+${pkgList.map(pkg => `apt-get install -y ${pkg}`).join('\n')}`;
+
+  await runAsRootScript(installScript);
 }
 
 /**
@@ -190,7 +200,13 @@ export async function aptRemove(packages: string | string[]): Promise<void> {
   const pkgList = Array.isArray(packages) ? packages : [packages];
   logger.info(`==> 移除包: ${pkgList.join(", ")}`);
 
-  await $`APT_LISTCHANGES_FRONTEND=none apt-get remove -y ${pkgList.join(" ")} || true`;
+  const removeScript = `set -e
+export APT_LISTCHANGES_FRONTEND=none
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get remove -y ${pkgList.join(" ")} || true`;
+
+  await runAsRootScript(removeScript);
 }
 
 /**
@@ -201,7 +217,13 @@ export async function addPpa(ppa: string): Promise<void> {
 
   // 确保 software-properties-common 已安装
   await aptInstall("software-properties-common");
-  await $`add-apt-repository -y ${ppa}`;
+
+  const ppaScript = `set -e
+
+# 添加 PPA 源
+add-apt-repository -y ${ppa}`;
+
+  await runAsRootScript(ppaScript);
   await aptUpdate();
 }
 
@@ -213,12 +235,16 @@ export async function addGpgKey(url: string, keyring?: string): Promise<void> {
 
   logger.info(`==> 添加 GPG 密钥: ${url}`);
 
-  // 确保目录存在
-  await $`install -m 0755 -d /etc/apt/keyrings`;
+  const keyScript = `set -e
 
-  // 下载并安装密钥
-  await $`curl -fsSL ${url} | gpg --dearmor -o ${keyringPath}`;
-  await $`chmod a+r ${keyringPath}`;
+# 确保目录存在
+install -m 0755 -d /etc/apt/keyrings
+
+# 下载并安装密钥
+curl -fsSL ${url} | gpg --dearmor -o ${keyringPath}
+chmod a+r ${keyringPath}`;
+
+  await runAsRootScript(keyScript);
 }
 
 /**
@@ -227,7 +253,12 @@ export async function addGpgKey(url: string, keyring?: string): Promise<void> {
 export async function addRepository(repo: string): Promise<void> {
   logger.info(`==> 添加软件源: ${repo}`);
 
-  await $`echo "${repo}" | tee /etc/apt/sources.list.d/custom.list > /dev/null`;
+  const repoScript = `set -e
+
+# 添加软件源
+echo "${repo}" | tee /etc/apt/sources.list.d/custom.list > /dev/null`;
+
+  await runAsRootScript(repoScript);
   await aptUpdate();
 }
 
@@ -285,6 +316,50 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
   } catch (error) {
     logger.error(`==> 调试: runAsUserScript - 脚本执行失败: ${error.message}`);
     logger.error(`==> 调试: runAsUserScript - 错误详情: ${JSON.stringify(error, null, 2)}`);
+    throw error;
+  }
+}
+
+/**
+ * 以 root 权限执行脚本
+ * 统一的 root 权限管理，所有 install.ts 需要 root 权限的操作都应使用此函数
+ */
+export async function runAsRootScript(script: string): Promise<string> {
+  logger.info(`==> 调试: runAsRootScript - 脚本长度: ${script.length} 字符`);
+
+  // 检查当前是否已经是 root
+  const currentUser = getCurrentUser();
+  if (currentUser === "root") {
+    logger.info("==> 调试: 当前已是 root 用户，直接执行脚本");
+    return await runAsUserScript(script, "root");
+  }
+
+  // 需要提升权限执行
+  logger.info("==> 调试: 以 sudo 提升权限执行脚本");
+
+  try {
+    // 将脚本写入临时文件
+    const tmpFile = `/tmp/root-script-${Date.now()}.sh`;
+    await Bun.write(tmpFile, script);
+    await $`chmod +x ${tmpFile}`;
+
+    let result: string;
+    try {
+      // 使用 sudo 执行脚本
+      result = await $`sudo bash ${tmpFile}`.text();
+    } finally {
+      // 清理临时文件
+      await $`sudo rm -f ${tmpFile}`.nothrow();
+    }
+
+    logger.info(`==> 调试: runAsRootScript - 脚本执行成功，输出长度: ${result.length} 字符`);
+    if (result.length > 0) {
+      logger.info(`==> 调试: runAsRootScript - 前100字符: ${result.substring(0, 100)}`);
+    }
+    return result;
+  } catch (error) {
+    logger.error(`==> 调试: runAsRootScript - 脚本执行失败: ${error.message}`);
+    logger.error(`==> 调试: runAsRootScript - 错误详情: ${JSON.stringify(error, null, 2)}`);
     throw error;
   }
 }
@@ -365,7 +440,13 @@ export async function copyToUserHome(src: string, dest: string, user?: string): 
  */
 export async function enableService(service: string): Promise<void> {
   logger.info(`==> 启用服务: ${service}`);
-  await $`systemctl enable ${service}`;
+
+  const enableScript = `set -e
+
+# 启用系统服务
+systemctl enable ${service}`;
+
+  await runAsRootScript(enableScript);
 }
 
 /**
@@ -373,7 +454,13 @@ export async function enableService(service: string): Promise<void> {
  */
 export async function startService(service: string): Promise<void> {
   logger.info(`==> 启动服务: ${service}`);
-  await $`systemctl start ${service}`;
+
+  const startScript = `set -e
+
+# 启动系统服务
+systemctl start ${service}`;
+
+  await runAsRootScript(startScript);
 }
 
 /**
@@ -381,7 +468,13 @@ export async function startService(service: string): Promise<void> {
  */
 export async function restartService(service: string): Promise<void> {
   logger.info(`==> 重启服务: ${service}`);
-  await $`systemctl restart ${service}`;
+
+  const restartScript = `set -e
+
+# 重启系统服务
+systemctl restart ${service}`;
+
+  await runAsRootScript(restartScript);
 }
 
 /**
@@ -389,7 +482,13 @@ export async function restartService(service: string): Promise<void> {
  */
 export async function addUserToGroup(user: string, group: string): Promise<void> {
   logger.info(`==> 添加用户 ${user} 到组 ${group}`);
-  await $`usermod -aG ${group} ${user}`;
+
+  const addUserScript = `set -e
+
+# 添加用户到组
+usermod -aG ${group} ${user}`;
+
+  await runAsRootScript(addUserScript);
 }
 
 // ========== 6. 创建系统链接 ==========
@@ -399,7 +498,13 @@ export async function addUserToGroup(user: string, group: string): Promise<void>
  */
 export async function createSymlink(src: string, dest: string): Promise<void> {
   logger.info(`==> 创建符号链接: ${src} -> ${dest}`);
-  await $`ln -sf ${src} ${dest}`;
+
+  const symlinkScript = `set -e
+
+# 创建符号链接
+ln -sf ${src} ${dest}`;
+
+  await runAsRootScript(symlinkScript);
 }
 
 /**
