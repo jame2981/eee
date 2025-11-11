@@ -70,6 +70,89 @@ export function getUserHome(user?: string): string {
   return getUserEnv().home;
 }
 
+/**
+ * 重新加载环境变量
+ * 用于软件安装后刷新PATH和其他环境变量
+ */
+export async function reloadEnv(user?: string): Promise<void> {
+  const targetUser = user || getCurrentUser();
+  const userHome = getUserHome(targetUser);
+
+  logger.info("==> 重新加载环境变量...");
+
+  try {
+    // 构建环境变量重新加载脚本
+    const reloadScript = `
+      # 重新加载系统和用户的环境配置
+      echo "==> 调试: 开始重新加载环境变量"
+
+      # 1. 重新加载系统级环境
+      if [ -f /etc/environment ]; then
+        echo "==> 调试: 重新加载 /etc/environment"
+        set -a && source /etc/environment && set +a
+      fi
+
+      # 2. 重新加载系统级 profile
+      if [ -f /etc/profile ]; then
+        echo "==> 调试: 重新加载 /etc/profile"
+        source /etc/profile
+      fi
+
+      # 3. 重新加载用户级配置文件
+      if [ -f "${userHome}/.bashrc" ]; then
+        echo "==> 调试: 重新加载 ~/.bashrc"
+        source "${userHome}/.bashrc"
+      fi
+
+      if [ -f "${userHome}/.bash_profile" ]; then
+        echo "==> 调试: 重新加载 ~/.bash_profile"
+        source "${userHome}/.bash_profile"
+      fi
+
+      if [ -f "${userHome}/.profile" ]; then
+        echo "==> 调试: 重新加载 ~/.profile"
+        source "${userHome}/.profile"
+      fi
+
+      # 4. 重新加载 zsh 配置 (如果存在)
+      if [ -f "${userHome}/.zshrc" ]; then
+        echo "==> 调试: 重新加载 ~/.zshrc"
+        source "${userHome}/.zshrc"
+      fi
+
+      # 5. 显示当前 PATH
+      echo "==> 调试: 当前PATH: $PATH"
+
+      # 6. 验证常见命令路径
+      for cmd in node npm nvm docker; do
+        if which "$cmd" >/dev/null 2>&1; then
+          echo "==> 调试: $cmd 路径: $(which $cmd)"
+        else
+          echo "==> 调试: $cmd 命令未找到"
+        fi
+      done
+
+      echo "==> 调试: 环境变量重新加载完成"
+    `;
+
+    // 执行重新加载脚本
+    const result = await runAsUserScript(reloadScript, targetUser);
+
+    logger.info("==> 环境变量重新加载结果:");
+    result.split('\n').forEach(line => {
+      if (line.trim()) {
+        logger.info(`    ${line.trim()}`);
+      }
+    });
+
+    logger.success("✅ 环境变量重新加载完成");
+
+  } catch (error) {
+    logger.warn(`⚠️  环境变量重新加载失败: ${error.message}`);
+    logger.info("💡 提示: 某些环境变量可能需要重新登录或重启shell才能生效");
+  }
+}
+
 // ========== 2. 系统包管理 ==========
 
 /**
@@ -165,15 +248,34 @@ export async function runAsUser(command: string, user?: string): Promise<string>
 
 /**
  * 以指定用户身份执行脚本
+ * 修复: 正确处理多行脚本的引用，增加调试日志
  */
 export async function runAsUserScript(script: string, user?: string): Promise<string> {
   const targetUser = user || getCurrentUser();
 
-  if (targetUser === "root") {
-    return await $`bash -c ${script}`.text();
-  }
+  // 确保脚本被正确引用，避免shell解析问题
+  const quotedScript = script.replace(/'/g, "'\"'\"'");
 
-  return await $`sudo -u ${targetUser} bash -c ${script}`.text();
+  logger.info(`==> 调试: runAsUserScript - 目标用户: ${targetUser}`);
+  logger.info(`==> 调试: runAsUserScript - 脚本长度: ${script.length} 字符`);
+
+  try {
+    let result: string;
+    if (targetUser === "root") {
+      logger.info("==> 调试: 以root用户执行脚本");
+      result = await $`bash -c '${quotedScript}'`.text();
+    } else {
+      logger.info(`==> 调试: 以sudo -u ${targetUser}执行脚本`);
+      result = await $`sudo -u ${targetUser} bash -c '${quotedScript}'`.text();
+    }
+
+    logger.info(`==> 调试: runAsUserScript - 脚本执行成功，输出长度: ${result.length} 字符`);
+    return result;
+  } catch (error) {
+    logger.error(`==> 调试: runAsUserScript - 脚本执行失败: ${error.message}`);
+    logger.error(`==> 调试: runAsUserScript - 错误详情: ${JSON.stringify(error, null, 2)}`);
+    throw error;
+  }
 }
 
 /**
