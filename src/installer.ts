@@ -49,7 +49,26 @@ export async function installEnvironment(config: EnvironmentConfig) {
     logger.info(`\\n[${current}/${total}] 🔧 正在安装: ${pkg}`);
 
     try {
-      // 动态导入并执行安装模块 - 使用绝对路径避免相对路径解析问题
+      // 1. 如果存在 pre_install.ts，先执行它
+      try {
+        const preInstallModule = await import(`${process.cwd()}/pkgs/${pkg}/pre_install.ts`);
+        const preInstallFunction = preInstallModule.default;
+
+        if (typeof preInstallFunction === 'function') {
+          logger.info(`  ==> 执行 ${pkg} 依赖安装...`);
+          await preInstallFunction();
+        }
+      } catch (preError) {
+        // pre_install.ts 是可选的，如果不存在就忽略
+        if (preError.message.includes('Cannot resolve module') || preError.message.includes('Cannot find module')) {
+          // 文件不存在，忽略
+        } else {
+          logger.warn(`⚠️ ${pkg} 依赖安装失败: ${preError.message}`);
+          throw preError; // 依赖安装失败应该中止主安装
+        }
+      }
+
+      // 2. 执行主要安装模块 - 使用绝对路径避免相对路径解析问题
       const installModule = await import(`${process.cwd()}/pkgs/${pkg}/install.ts`);
       const installFunction = installModule.default;
 

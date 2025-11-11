@@ -6,17 +6,18 @@
  * Docker Engine 和 Docker Compose 安装
  */
 
+import { $ } from "bun";
 import {
   getUserEnv,
   aptInstall,
-  aptRemove,
   addGpgKey,
   addRepository,
   addUserToGroup,
   enableService,
   startService,
-  detectArch,
   getSystemInfo,
+  isCommandAvailable,
+  isPackageInstalled,
   logger
 } from "@/pkg-utils";
 
@@ -26,19 +27,31 @@ export default async function install(): Promise<void> {
   try {
     const { user } = getUserEnv();
 
-    // 0. 清理旧版本Docker
-    logger.info("==> 清理旧版本Docker...");
-    await aptRemove([
-      "docker.io",
-      "docker-doc",
-      "docker-compose",
-      "docker-compose-v2",
-      "podman-docker",
-      "containerd",
-      "runc"
-    ]);
+    // 1. 检查 Docker 是否已安装
+    const isDockerInstalled = await isCommandAvailable("docker");
+    if (isDockerInstalled) {
+      logger.success("✅ Docker 已安装，跳过安装步骤");
 
-    // 1. 安装必需的包
+      // 仍需检查用户是否在 docker 组中
+      try {
+        const userGroups = await $`groups ${user}`.text();
+        if (!userGroups.includes('docker')) {
+          logger.info("==> 将用户添加到 docker 组...");
+          await addUserToGroup(user, "docker");
+          logger.success(`✅ 用户 ${user} 已添加到 docker 组`);
+        } else {
+          logger.info(`✅ 用户 ${user} 已在 docker 组中`);
+        }
+      } catch (error) {
+        logger.warn(`⚠️  检查用户组失败: ${error.message}`);
+      }
+
+      return;
+    }
+
+    logger.info("==> Docker 未安装，开始安装...");
+
+    // 2. 安装必需的包
     await aptInstall([
       "ca-certificates",
       "curl",

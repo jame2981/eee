@@ -897,6 +897,32 @@ export async function installPackagesWithFallback(
 
 // ========== 重新导出常用模块 ==========
 
+// ========== 12. 包状态检查功能 ==========
+
+/**
+ * 检查包是否已安装
+ */
+export async function isPackageInstalled(packageName: string): Promise<boolean> {
+  try {
+    const result = await $`dpkg -l ${packageName}`.text();
+    return result.includes('ii '); // 'ii' 表示已安装
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 检查命令是否可用
+ */
+export async function isCommandAvailable(command: string): Promise<boolean> {
+  try {
+    await $`command -v ${command}`.text();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * 重新导出 logger，方便其他包导入
  */
