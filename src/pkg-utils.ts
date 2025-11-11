@@ -14,7 +14,7 @@ import { logger } from "@/logger";
 
 /**
  * APT 统一环境变量配置
- * - APT_LISTCHANGES_FRONTEND=none: 禁用 apt 命令警告
+ * - APT_LISTCHANGES_FRONTEND=none: 禁用 apt-get 命令警告
  * - DEBIAN_FRONTEND=noninteractive: 非交互式安装
  */
 const APT_ENV = {
@@ -78,7 +78,7 @@ export function getUserHome(user?: string): string {
  */
 export async function _aptUpdate(): Promise<void> {
   logger.info("==> 更新包索引...");
-  await $`APT_LISTCHANGES_FRONTEND=none apt update -qq`;
+  await $`APT_LISTCHANGES_FRONTEND=none apt-get update -qq`;
 }
 
 /**
@@ -96,7 +96,7 @@ export async function aptInstall(packages: string | string[]): Promise<void> {
   logger.info(`==> 安装包: ${pkgList.join(", ")}`);
 
   for (const pkg of pkgList) {
-    await $`APT_LISTCHANGES_FRONTEND=none DEBIAN_FRONTEND=noninteractive apt install -y ${pkg}`;
+    await $`APT_LISTCHANGES_FRONTEND=none DEBIAN_FRONTEND=noninteractive apt-get install -y ${pkg}`;
   }
 }
 
@@ -107,7 +107,7 @@ export async function aptRemove(packages: string | string[]): Promise<void> {
   const pkgList = Array.isArray(packages) ? packages : [packages];
   logger.info(`==> 移除包: ${pkgList.join(", ")}`);
 
-  await $`APT_LISTCHANGES_FRONTEND=none apt remove -y ${pkgList.join(" ")} || true`;
+  await $`APT_LISTCHANGES_FRONTEND=none apt-get remove -y ${pkgList.join(" ")} || true`;
 }
 
 /**

@@ -4,8 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # 创建非root用户并安装基础依赖
 RUN useradd -m -s /bin/bash devuser && \
-    APT_LISTCHANGES_FRONTEND=none apt update && \
-    APT_LISTCHANGES_FRONTEND=none apt install -y sudo curl git unzip && \
+    APT_LISTCHANGES_FRONTEND=none apt-get update && \
+    APT_LISTCHANGES_FRONTEND=none apt-get install -y apt-utils sudo curl git unzip && \
     echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
     rm -rf /var/lib/apt/lists/*
 

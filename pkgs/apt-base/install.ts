@@ -23,7 +23,7 @@ export default async function install(): Promise<void> {
 
     // 升级所有包
     logger.info("==> 升级系统包...");
-    await $`APT_LISTCHANGES_FRONTEND=none DEBIAN_FRONTEND=noninteractive apt upgrade -y`;
+    await $`APT_LISTCHANGES_FRONTEND=none DEBIAN_FRONTEND=noninteractive apt-get upgrade -y`;
 
     logger.success("✅ 系统包更新和升级完成!");
 
