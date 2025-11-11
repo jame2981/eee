@@ -893,12 +893,16 @@ export interface PackageInfo {
  */
 export async function checkPackageInstalled(checkCommand: string): Promise<{ installed: boolean; version?: string }> {
   try {
-    const output = await $`${checkCommand}`.text();
+    // 使用 runAsRootScript 来执行检查命令，确保有足够权限访问 dpkg 数据库
+    const output = await runAsRootScript(checkCommand);
     return {
       installed: true,
       version: output.trim().split('\n')[0] // 取第一行作为版本信息
     };
-  } catch {
+  } catch (error) {
+    // dpkg 命令在包未安装时会返回非零退出码，这是正常行为
+    // 不应该抛出错误，而应该返回 installed: false
+    logger.debug(`包检查命令失败（这通常意味着包未安装）: ${error.message}`);
     return { installed: false };
   }
 }

@@ -27,8 +27,8 @@ export async function installEnvironment(config: EnvironmentConfig) {
     logger.info(`📖 ${description}`);
   }
 
-  // 检查权限
-  requireRoot();
+  // 注意：不再需要 requireRoot() 检查，因为我们使用 runAsRootScript() 统一权限管理
+  // 各个包的 install.ts 会通过 runAsRootScript() 自动获得所需权限
 
   // 显示系统信息
   const systemInfo = await getSystemInfo();
