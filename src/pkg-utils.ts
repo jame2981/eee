@@ -888,3 +888,10 @@ export async function installPackagesWithFallback(
 
   return results;
 }
+
+// ========== 重新导出常用模块 ==========
+
+/**
+ * 重新导出 logger，方便其他包导入
+ */
+export { logger } from "@/logger";
