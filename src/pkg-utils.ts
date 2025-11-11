@@ -593,6 +593,7 @@ export interface SystemInfo {
   version: string;
   arch: string;
   packageManager: string;
+  ubuntuCodename?: string; // Ubuntu 发行版代号，如 jammy, focal 等
 }
 
 /**
@@ -610,13 +611,14 @@ export async function detectOS(): Promise<string> {
 /**
  * 检测 Linux 发行版
  */
-export async function detectDistro(): Promise<{ distro: string; version: string }> {
+export async function detectDistro(): Promise<{ distro: string; version: string; ubuntuCodename?: string }> {
   try {
     const osRelease = await $`cat /etc/os-release`.text();
     const lines = osRelease.split('\n');
 
     let distro = "unknown";
     let version = "unknown";
+    let ubuntuCodename: string | undefined = undefined;
 
     for (const line of lines) {
       if (line.startsWith('ID=')) {
@@ -625,9 +627,12 @@ export async function detectDistro(): Promise<{ distro: string; version: string 
       if (line.startsWith('VERSION_ID=')) {
         version = line.split('=')[1].replace(/"/g, '');
       }
+      if (line.startsWith('UBUNTU_CODENAME=')) {
+        ubuntuCodename = line.split('=')[1].replace(/"/g, '');
+      }
     }
 
-    return { distro, version };
+    return { distro, version, ubuntuCodename };
   } catch {
     return { distro: "unknown", version: "unknown" };
   }
@@ -677,7 +682,7 @@ export async function detectPackageManager(): Promise<string> {
  * 获取完整的系统信息
  */
 export async function getSystemInfo(): Promise<SystemInfo> {
-  const [os, { distro, version }, arch, packageManager] = await Promise.all([
+  const [os, { distro, version, ubuntuCodename }, arch, packageManager] = await Promise.all([
     detectOS(),
     detectDistro(),
     detectArch(),
@@ -689,7 +694,8 @@ export async function getSystemInfo(): Promise<SystemInfo> {
     distro,
     version,
     arch,
-    packageManager
+    packageManager,
+    ubuntuCodename
   };
 }
 

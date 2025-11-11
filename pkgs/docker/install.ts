@@ -16,6 +16,7 @@ import {
   enableService,
   startService,
   detectArch,
+  getSystemInfo,
   logger
 } from "@/pkg-utils";
 
@@ -49,8 +50,12 @@ export default async function install(): Promise<void> {
     await addGpgKey("https://download.docker.com/linux/ubuntu/gpg", "docker");
 
     // 3. 添加 Docker 仓库
-    const arch = await detectArch();
-    const ubuntuCodename = await Bun.spawn(["bash", "-c", ". /etc/os-release && echo $UBUNTU_CODENAME"]).text().then(s => s.trim());
+    const systemInfo = await getSystemInfo();
+    const { arch, ubuntuCodename } = systemInfo;
+
+    if (!ubuntuCodename) {
+      throw new Error("无法获取 Ubuntu 版本代号，可能不是 Ubuntu 系统");
+    }
 
     const dockerRepo = `deb [arch=${arch} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${ubuntuCodename} stable`;
     await addRepository(dockerRepo);
