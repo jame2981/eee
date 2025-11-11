@@ -49,10 +49,10 @@ fi`;
     const pythonCheckScript = `set -e
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
-# 检查是否已安装 Python 3.13
-if uv python list | grep -q "3.13"; then
+# 检查是否已安装 Python 3.13（排除 <download available> 的条目）
+if uv python list | grep "3.13" | grep -v "<download available>" | grep -q "cpython"; then
   echo "Python 3.13 already installed"
-  uv python list | grep "3.13" | head -1
+  uv python list | grep "3.13" | grep -v "<download available>" | head -1
 else
   echo "Python 3.13 not installed"
 fi`;

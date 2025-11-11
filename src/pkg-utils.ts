@@ -345,13 +345,41 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
     return result;
   } catch (error) {
     logger.error(`==> 调试: runAsUserScript - 脚本执行失败: ${error.message}`);
+
+    // 显示执行的脚本内容
+    logger.error(`==> 调试: runAsUserScript - 失败的脚本内容:`);
+    script.split('\n').forEach((line, index) => {
+      logger.error(`  ${index + 1}: ${line}`);
+    });
+
+    // 显示执行命令
+    if (targetUser === "root") {
+      logger.error(`==> 调试: runAsUserScript - 执行命令: bash ${tmpFile}`);
+    } else {
+      logger.error(`==> 调试: runAsUserScript - 执行命令: sudo -u ${targetUser} bash ${tmpFile}`);
+    }
+
+    // 提取并显示标准错误输出
     if (error.message.includes('stderr:')) {
       const stderrMatch = error.message.match(/stderr: (.+)/);
       if (stderrMatch) {
-        logger.error(`==> 调试: runAsUserScript - 标准错误输出: ${stderrMatch[1]}`);
+        logger.error(`==> 调试: runAsUserScript - 标准错误输出:`);
+        stderrMatch[1].split('\n').forEach(line => {
+          if (line.trim()) {
+            logger.error(`    ${line}`);
+          }
+        });
       }
     }
-    logger.error(`==> 调试: runAsUserScript - 完整错误对象: ${JSON.stringify(error, null, 2)}`);
+
+    // 提取并显示退出码
+    if (error.message.includes('exit code')) {
+      const exitCodeMatch = error.message.match(/exit code (\d+)/);
+      if (exitCodeMatch) {
+        logger.error(`==> 调试: runAsUserScript - 退出码: ${exitCodeMatch[1]}`);
+      }
+    }
+
     throw error;
   }
 }
