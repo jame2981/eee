@@ -31,10 +31,25 @@ export interface UserEnv {
 
 /**
  * 获取当前用户环境信息
+ * 修复: 确保sudo环境下正确检测原始用户和其主目录
  */
 export function getUserEnv(): UserEnv {
+  // 优先级: REAL_USER > SUDO_USER > USER > LOGNAME > root
   const user = process.env.REAL_USER || process.env.SUDO_USER || process.env.USER || process.env.LOGNAME || "root";
-  const home = process.env.REAL_HOME || process.env.HOME || `/home/${user}`;
+
+  // 如果检测到sudo环境且有原始用户，强制使用正确的用户主目录
+  let home: string;
+  if (process.env.SUDO_USER && process.env.SUDO_USER !== "root") {
+    // sudo环境：使用原始用户的主目录
+    home = process.env.REAL_HOME || `/home/${process.env.SUDO_USER}`;
+  } else if (user === "root") {
+    // root用户
+    home = "/root";
+  } else {
+    // 普通用户环境
+    home = process.env.REAL_HOME || process.env.HOME || `/home/${user}`;
+  }
+
   return { user, home };
 }
 
