@@ -62,7 +62,8 @@ echo "==> UV 安装脚本执行完成"`;
     // 3. 验证 UV 安装
     logger.info("==> 验证 UV 安装...");
     const uvVerifyScript = `set -e
-export PATH="$HOME/.cargo/bin:$PATH"
+# UV 可能安装在 ~/.local/bin 或 ~/.cargo/bin，都添加到 PATH 中
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 if command -v uv >/dev/null 2>&1; then
   echo "UV installed successfully: $(uv --version)"
 else
@@ -81,7 +82,7 @@ fi`;
     // 4. 测试 UV 功能
     logger.info("==> 测试 UV 功能...");
     const uvTestScript = `set -e
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 uv --version`;
 
     const uvTestResult = await runAsUserScript(uvTestScript, currentUser);

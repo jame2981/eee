@@ -29,7 +29,7 @@ export default async function install(): Promise<void> {
     // 1. 验证 UV 已安装
     logger.info("==> 验证 UV 依赖...");
     const uvVerifyScript = `set -e
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 if command -v uv >/dev/null 2>&1; then
   echo "exists"
 else
@@ -47,7 +47,7 @@ fi`;
     // 2. 检查 Python 3.13 是否已安装
     logger.info("==> 检查 Python 3.13 安装状态...");
     const pythonCheckScript = `set -e
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
 # 检查是否已安装 Python 3.13
 if uv python list | grep -q "3.13"; then
@@ -78,7 +78,7 @@ set -e  # 遇到错误立即退出
 echo "==> 开始 Python 3.13 安装"
 
 # 环境变量设置
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 echo "==> PATH: $PATH"
 
 # 验证 UV 安装
@@ -123,7 +123,7 @@ echo "✅ Python 3.13 安装完成"`;
     logger.info("==> 最终验证 Python 3.13 安装...");
 
     const finalVerifyScript = `set -e
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 echo "UV 版本: $(uv --version)"
 echo "已安装的 Python 版本:"
 uv python list | grep "3.13" | head -3`;
@@ -156,7 +156,7 @@ async function createSystemLinks(currentUser: string): Promise<void> {
 
   try {
     const getPathsScript = `set -e
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
 # 获取 UV 管理的 Python 3.13 路径
 UV_PYTHON_PATH=$(uv python find 3.13)

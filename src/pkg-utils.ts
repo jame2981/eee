@@ -287,8 +287,14 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
   logger.info(`==> 调试: runAsUserScript - 目标用户: ${targetUser}`);
   logger.info(`==> 调试: runAsUserScript - 脚本长度: ${script.length} 字符`);
 
+  // 显示脚本前200字符用于调试
+  if (script.length > 0) {
+    logger.info(`==> 调试: runAsUserScript - 脚本前200字符: ${script.substring(0, 200)}`);
+  }
+
   try {
     let result: string;
+    let stderr: string = "";
 
     // 将脚本写入临时文件
     const tmpFile = `/tmp/script-${Date.now()}.sh`;
@@ -298,10 +304,34 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
     try {
       if (targetUser === "root") {
         logger.info("==> 调试: 以root用户执行脚本");
-        result = await $`bash ${tmpFile}`.text();
+        const proc = Bun.spawn(["bash", tmpFile], {
+          stdout: "pipe",
+          stderr: "pipe"
+        });
+        const output = await new Response(proc.stdout).text();
+        const errOutput = await new Response(proc.stderr).text();
+        const exitCode = await proc.exited;
+
+        if (exitCode !== 0) {
+          stderr = errOutput;
+          throw new Error(`Script failed with exit code ${exitCode}. stderr: ${stderr}`);
+        }
+        result = output;
       } else {
         logger.info(`==> 调试: 以sudo -u ${targetUser}执行脚本`);
-        result = await $`sudo -u ${targetUser} bash ${tmpFile}`.text();
+        const proc = Bun.spawn(["sudo", "-u", targetUser, "bash", tmpFile], {
+          stdout: "pipe",
+          stderr: "pipe"
+        });
+        const output = await new Response(proc.stdout).text();
+        const errOutput = await new Response(proc.stderr).text();
+        const exitCode = await proc.exited;
+
+        if (exitCode !== 0) {
+          stderr = errOutput;
+          throw new Error(`Script failed with exit code ${exitCode}. stderr: ${stderr}`);
+        }
+        result = output;
       }
     } finally {
       // 清理临时文件
@@ -310,12 +340,18 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
 
     logger.info(`==> 调试: runAsUserScript - 脚本执行成功，输出长度: ${result.length} 字符`);
     if (result.length > 0) {
-      logger.info(`==> 调试: runAsUserScript - 前100字符: ${result.substring(0, 100)}`);
+      logger.info(`==> 调试: runAsUserScript - 前200字符: ${result.substring(0, 200)}`);
     }
     return result;
   } catch (error) {
     logger.error(`==> 调试: runAsUserScript - 脚本执行失败: ${error.message}`);
-    logger.error(`==> 调试: runAsUserScript - 错误详情: ${JSON.stringify(error, null, 2)}`);
+    if (error.message.includes('stderr:')) {
+      const stderrMatch = error.message.match(/stderr: (.+)/);
+      if (stderrMatch) {
+        logger.error(`==> 调试: runAsUserScript - 标准错误输出: ${stderrMatch[1]}`);
+      }
+    }
+    logger.error(`==> 调试: runAsUserScript - 完整错误对象: ${JSON.stringify(error, null, 2)}`);
     throw error;
   }
 }
