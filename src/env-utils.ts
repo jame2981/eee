@@ -64,7 +64,7 @@ export async function insertPath(pathToAdd: string, comment?: string): Promise<v
       `    *:"${pathToAdd}":*)`,
       `        ;;`,
       `    *)`,
-      `        # Prepending path in case a system-installed binary needs to be overridden`,
+      `        # Prepending path to prioritize development tools over system binaries`,
       `        export PATH="${pathToAdd}:$PATH"`,
       `        ;;`,
       `esac`
