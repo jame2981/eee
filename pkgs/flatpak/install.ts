@@ -52,12 +52,12 @@ export default async function install(): Promise<void> {
     logger.info(`==> 使用国内镜像源: ${flathubUrl}`);
 
     try {
-      await $`timeout 60 ${flatpakPath.trim()} remote-add --if-not-exists --user flathub ${flathubUrl}`.timeout(65000);
+      await $`timeout 60 ${flatpakPath.trim()} remote-add --if-not-exists --user flathub ${flathubUrl}`;
       logger.info("==> 用户级 Flathub (国内镜像) 仓库添加成功");
     } catch (userError) {
       logger.warn(`⚠️  用户级仓库添加失败，尝试系统级: ${userError.message}`);
       // 如果用户级失败，尝试系统级
-      await $`timeout 60 ${flatpakPath.trim()} remote-add --if-not-exists --system flathub ${flathubUrl}`.timeout(65000);
+      await $`timeout 60 ${flatpakPath.trim()} remote-add --if-not-exists --system flathub ${flathubUrl}`;
       logger.info("==> 系统级 Flathub (国内镜像) 仓库添加成功");
     }
 
