@@ -256,8 +256,22 @@ export async function addGpgKey(url: string, keyring?: string): Promise<void> {
 # 确保目录存在
 install -m 0755 -d /etc/apt/keyrings
 
-# 下载并安装密钥
-curl -fsSL ${url} | gpg --dearmor -o ${keyringPath}
+# 下载并安装密钥（带重试，容器/网络不稳定场景友好）
+attempts=3
+for i in $(seq 1 $attempts); do
+  if curl -fsSL --max-time 60 ${url} | gpg --dearmor -o ${keyringPath}; then
+    echo "GPG key downloaded successfully on attempt $i"
+    break
+  fi
+  echo "Attempt $i to download GPG key failed; retrying in 5s..." >&2
+  sleep 5
+done
+
+if [ ! -s ${keyringPath} ]; then
+  echo "Failed to download GPG key from ${url}" >&2
+  exit 2
+fi
+
 chmod a+r ${keyringPath}`;
 
   await runAsRootScript(keyScript);
@@ -266,13 +280,21 @@ chmod a+r ${keyringPath}`;
 /**
  * 添加软件源
  */
-export async function addRepository(repo: string): Promise<void> {
+export async function addRepository(repo: string, name?: string): Promise<void> {
   logger.info(`==> 添加软件源: ${repo}`);
 
+  const file = name ? `/etc/apt/sources.list.d/${name}.list` : `/etc/apt/sources.list.d/custom.list`;
   const repoScript = `set -e
 
-# 添加软件源
-echo "${repo}" | tee /etc/apt/sources.list.d/custom.list > /dev/null`;
+# 确保 sources.list.d 目录存在
+install -m 0755 -d /etc/apt/sources.list.d
+
+# 如果条目已存在则跳过，否则追加
+if [ -f "${file}" ] && grep -Fxq "${repo}" "${file}"; then
+  echo "Repository already exists in ${file}"
+else
+  echo "${repo}" | tee -a "${file}" > /dev/null
+fi`;
 
   await runAsRootScript(repoScript);
   await aptUpdate();
@@ -438,8 +460,8 @@ export async function runAsRootScript(script: string): Promise<string> {
     }
     return result;
   } catch (error) {
-    logger.error(`==> 调试: runAsRootScript - 脚本执行失败: ${error.message}`);
-    logger.error(`==> 调试: runAsRootScript - 错误详情: ${JSON.stringify(error, null, 2)}`);
+    logger.warn(`==> 调试: runAsRootScript - 脚本执行失败: ${error instanceof Error ? error.message : String(error)}`);
+    logger.warn(`==> 调试: runAsRootScript - 错误详情: ${JSON.stringify(error, null, 2)}`);
     throw error;
   }
 }
@@ -526,8 +548,12 @@ export async function enableService(service: string): Promise<void> {
 
   const enableScript = `set -e
 
-# 启用系统服务
-systemctl enable ${service}`;
+# 检查 systemd 可用性并启用服务（容器内降级处理）
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] && [ "$(cat /proc/1/comm)" = "systemd" ]; then
+  systemctl enable ${service}
+else
+  echo "systemd not available in this environment; skip enabling ${service}"
+fi`;
 
   await runAsRootScript(enableScript);
 }
@@ -540,8 +566,12 @@ export async function startService(service: string): Promise<void> {
 
   const startScript = `set -e
 
-# 启动系统服务
-systemctl start ${service}`;
+# 检查 systemd 可用性并启动服务（容器内降级处理）
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] && [ "$(cat /proc/1/comm)" = "systemd" ]; then
+  systemctl start ${service}
+else
+  echo "systemd not available in this environment; skip starting ${service}"
+fi`;
 
   await runAsRootScript(startScript);
 }
@@ -554,8 +584,12 @@ export async function restartService(service: string): Promise<void> {
 
   const restartScript = `set -e
 
-# 重启系统服务
-systemctl restart ${service}`;
+# 检查 systemd 可用性并重启服务（容器内降级处理）
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] && [ "$(cat /proc/1/comm)" = "systemd" ]; then
+  systemctl restart ${service}
+else
+  echo "systemd not available in this environment; skip restarting ${service}"
+fi`;
 
   await runAsRootScript(restartScript);
 }

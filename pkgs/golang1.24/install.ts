@@ -147,8 +147,8 @@ export PATH="$GOUP_ROOT/bin:$PATH"
       find '${goupRoot}' -name "go" -type f -executable 2>/dev/null || echo "未找到go二进制文件"
       echo
       echo "=== goup list命令测试 ==="
-      export PATH='$GOUP_ROOT/bin:$PATH'
-      '$GOUP_ROOT/bin/goup' list || echo "goup list命令失败"
+      export PATH="$GOUP_ROOT/bin:$PATH"
+      "$GOUP_ROOT/bin/goup" list || echo "goup list命令失败"
     `;
 
     await runAsUserScript(debugScript, currentUser);
@@ -158,16 +158,16 @@ export PATH="$GOUP_ROOT/bin:$PATH"
 
     const getGoPathScript = `
       export GOUP_ROOT='${goupRoot}'
-      export PATH='$GOUP_ROOT/bin:$PATH'
+      export PATH="$GOUP_ROOT/bin:$PATH"
 
       echo "开始查找 Go 安装路径..."
 
       # 方法1：通过 goup show 获取当前版本（使用绝对路径）
-      CURRENT_GO_VERSION=\$('$GOUP_ROOT/bin/goup' show 2>/dev/null | grep "current" | awk '{print \$2}' 2>/dev/null || echo "")
+      CURRENT_GO_VERSION=\$("$GOUP_ROOT/bin/goup" show 2>/dev/null | grep "current" | awk '{print \$2}' 2>/dev/null || echo "")
 
       if [ -n "\$CURRENT_GO_VERSION" ]; then
         echo "找到当前Go版本: \$CURRENT_GO_VERSION"
-        GO_VERSION_PATH='$GOUP_ROOT/\$CURRENT_GO_VERSION'
+        GO_VERSION_PATH="$GOUP_ROOT/\$CURRENT_GO_VERSION"
         if [ -f "\$GO_VERSION_PATH/bin/go" ]; then
           echo "GO_INSTALL_PATH:\$GO_VERSION_PATH"
           export PATH="\$GO_VERSION_PATH/bin:\$PATH"
@@ -178,7 +178,7 @@ export PATH="$GOUP_ROOT/bin:$PATH"
       else
         echo "未通过goup show获取版本，尝试直接查找..."
         # 方法2：查找1.24.x版本目录
-        for version_dir in \$(find '$GOUP_ROOT' -maxdepth 2 -name "1.24.*" -type d 2>/dev/null); do
+        for version_dir in \$(find "$GOUP_ROOT" -maxdepth 2 -name "1.24.*" -type d 2>/dev/null); do
           if [ -f "\$version_dir/bin/go" ]; then
             echo "找到Go安装目录: \$version_dir"
             echo "GO_INSTALL_PATH:\$version_dir"
@@ -189,8 +189,8 @@ export PATH="$GOUP_ROOT/bin:$PATH"
         done
 
         # 方法3：查找current符号链接
-        if [ -L '$GOUP_ROOT/current' ] && [ -f '$GOUP_ROOT/current/bin/go' ]; then
-          CURRENT_REAL_PATH=\$(readlink -f '$GOUP_ROOT/current')
+        if [ -L "$GOUP_ROOT/current" ] && [ -f "$GOUP_ROOT/current/bin/go" ]; then
+          CURRENT_REAL_PATH=\$(readlink -f "$GOUP_ROOT/current")
           echo "找到current链接指向: \$CURRENT_REAL_PATH"
           echo "GO_INSTALL_PATH:\$CURRENT_REAL_PATH"
           export PATH="\$CURRENT_REAL_PATH/bin:\$PATH"
@@ -278,18 +278,18 @@ export PATH="$GOUP_ROOT/bin:$PATH"
       fi
 
       export GOUP_ROOT='${goupRoot}'
-      export PATH='$GOUP_ROOT/bin:$PATH'
+      export PATH="$GOUP_ROOT/bin:$PATH"
       export GOPATH='${goPath}'
 
       # 使用检测到的实际Go路径
       if [ -n '${actualGoPath}' ] && [ -f '${actualGoPath}/bin/go' ]; then
         echo "使用实际Go路径: ${actualGoPath}"
-        export PATH='${actualGoPath}/bin:$PATH'
+        export PATH="${actualGoPath}/bin:$PATH"
         export GOROOT='${actualGoPath}'
       else
         echo "回退到默认路径配置"
-        export PATH='$GOUP_ROOT/current/bin:$PATH'
-        export GOROOT='$GOUP_ROOT/current'
+        export PATH="$GOUP_ROOT/current/bin:$PATH"
+        export GOROOT="$GOUP_ROOT/current"
       fi
 
       echo "当前环境验证:"
@@ -332,7 +332,7 @@ export PATH="$GOUP_ROOT/bin:$PATH"
               export GOROOT='${goRoot}'
 
               # 设置完整的PATH（按优先级排序）
-              export PATH='${goBinPath}:${goPath}/bin:${goupRoot}/bin:$PATH'
+              export PATH="${goBinPath}:${goPath}/bin:${goupRoot}/bin:$PATH"
 
               echo "安装工具: ${tool}"
               echo "GOUP_ROOT: $GOUP_ROOT"
@@ -376,17 +376,17 @@ export PATH="$GOUP_ROOT/bin:$PATH"
 
     const finalVerifyScript = `
       export GOUP_ROOT='${goupRoot}'
-      export PATH='$GOUP_ROOT/bin:$PATH'
+      export PATH="$GOUP_ROOT/bin:$PATH"
       export GOPATH='${goPath}'
 
       # 使用检测到的实际Go路径
       if [ -n '${actualGoPath}' ] && [ -f '${actualGoPath}/bin/go' ]; then
         echo "使用实际Go路径: ${actualGoPath}"
-        export PATH='${actualGoPath}/bin:$PATH'
+        export PATH="${actualGoPath}/bin:$PATH"
         export GOROOT='${actualGoPath}'
       else
         echo "回退到默认路径配置"
-        export PATH='$GOUP_ROOT/current/bin:$PATH'
+        export PATH="$GOUP_ROOT/current/bin:$PATH"
         export GOROOT='$GOUP_ROOT/current'
       fi
 
@@ -406,7 +406,7 @@ export PATH="$GOUP_ROOT/bin:$PATH"
         echo "❌ Go 命令不可用"
         echo "调试信息:"
         echo "goup状态: $(goup list 2>/dev/null || echo '无法调用goup')"
-        find '$GOUP_ROOT' -name 'go' -type f 2>/dev/null | head -5 || echo "无法找到go二进制文件"
+        find "$GOUP_ROOT" -name 'go' -type f 2>/dev/null | head -5 || echo "无法找到go二进制文件"
       fi
     `;
 

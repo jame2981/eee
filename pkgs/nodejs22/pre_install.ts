@@ -80,7 +80,7 @@ export default async function preInstall(): Promise<void> {
     logger.info("==> 测试 NVM 功能...");
     const nvmTestResult = await runAsUserScript(`
       export NVM_DIR='${nvmDir}'
-      [ -s '$NVM_DIR/nvm.sh' ] && source '$NVM_DIR/nvm.sh'
+      [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
       nvm --version
     `, currentUser);
 

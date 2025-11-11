@@ -123,7 +123,7 @@ export default async function install(): Promise<void> {
     try {
       const getPathsScript = `
         export NVM_DIR='${nvmDir}'
-        [ -s '$NVM_DIR/nvm.sh' ] && source '$NVM_DIR/nvm.sh'
+        [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
         echo "NODE_PATH:$(which node)"
         echo "NPM_PATH:$(which npm)"
       `;
@@ -158,7 +158,7 @@ export default async function install(): Promise<void> {
 
     const finalVerifyScript = `
       export NVM_DIR='${nvmDir}'
-      [ -s '$NVM_DIR/nvm.sh' ] && source '$NVM_DIR/nvm.sh'
+      [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
       echo "Node.js: $(node --version)"
       echo "npm: $(npm --version)"
       echo "默认版本: $(nvm current)"

@@ -23,6 +23,14 @@ export const logger = {
   },
 
   /**
+   * 用于输出调试信息
+   * @param message 日志消息
+   */
+  debug: (message: string) => {
+    console.log(chalk.gray(`  [debug] ${message}`));
+  },
+
+  /**
    * 用于输出成功信息
    * @param message 日志消息
    */

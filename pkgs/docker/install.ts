@@ -71,7 +71,7 @@ export default async function install(): Promise<void> {
     }
 
     const dockerRepo = `deb [arch=${arch} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${ubuntuCodename} stable`;
-    await addRepository(dockerRepo);
+    await addRepository(dockerRepo, "docker");
 
     // 4. 安装 Docker
     await aptInstall([
@@ -82,9 +82,14 @@ export default async function install(): Promise<void> {
       "docker-compose-plugin"
     ]);
 
-    // 5. 启动 Docker 服务
-    await enableService("docker");
-    await startService("docker");
+    // 5. 启动 Docker 服务（可按需跳过）
+    const skipService = process.env.EEE_SKIP_DOCKER_SERVICE === "1" || process.env.EEE_CONTAINER_MODE === "1";
+    if (skipService) {
+      logger.info("==> 检测到容器模式或禁用标志，跳过 Docker 服务启用/启动");
+    } else {
+      await enableService("docker");
+      await startService("docker");
+    }
 
     // 6. 添加用户到 docker 组
     await addUserToGroup(user, "docker");
