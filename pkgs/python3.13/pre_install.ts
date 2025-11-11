@@ -17,6 +17,12 @@ import {
   logger
 } from "@/pkg-utils";
 
+import {
+  initializeEeeEnv,
+  insertPath,
+  addEnvironmentVariable
+} from "@/env-utils";
+
 export default async function preInstall(): Promise<void> {
   logger.info("🔧 开始安装 Python 依赖: UV...");
 
@@ -86,6 +92,16 @@ export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 uv --version`;
 
     const uvTestResult = await runAsUserScript(uvTestScript, currentUser);
+
+    // 5. 配置 UV 环境变量到统一的 ~/.eee-env
+    logger.info("==> 配置 UV 环境变量...");
+
+    // 初始化 eee-env 环境
+    await initializeEeeEnv();
+
+    // 添加 UV PATH 配置
+    await insertPath("$HOME/.local/bin", "UV Python Package Manager - Local Binaries");
+    await insertPath("$HOME/.cargo/bin", "UV Python Package Manager - Cargo Binaries");
 
     logger.success("✅ UV 依赖安装完成!");
     logger.info(`==> UV 版本: ${uvTestResult.trim()}`);

@@ -11,10 +11,15 @@ import {
   getCurrentUser,
   getUserHome,
   runAsUserScript,
-  createSymlink
+  createSymlink,
+  logger
 } from "@/pkg-utils";
 
-import { logger } from "@/logger";
+import {
+  initializeEeeEnv,
+  addEnvironmentVariable,
+  addSource
+} from "@/env-utils";
 
 export default async function install(): Promise<void> {
   logger.info("📦 开始安装 Node.js 22.x...");
@@ -161,6 +166,26 @@ export default async function install(): Promise<void> {
 
     const versionInfo = await runAsUserScript(finalVerifyScript, currentUser);
 
+    // 5. 配置 NVM 环境变量到统一的 ~/.eee-env
+    logger.info("==> 配置 NVM 环境变量...");
+
+    try {
+      // 初始化 eee-env 环境
+      await initializeEeeEnv();
+
+      // 添加 NVM 环境变量
+      await addEnvironmentVariable("NVM_DIR", nvmDir, "NVM (Node Version Manager) 安装目录");
+
+      // 添加 NVM 脚本加载配置
+      await addSource("$NVM_DIR/nvm.sh", "加载 NVM 主要功能");
+      await addSource("$NVM_DIR/bash_completion", "加载 NVM bash 自动补全");
+
+      logger.success("✅ NVM 环境配置完成");
+    } catch (error) {
+      logger.warn(`⚠️ 环境变量配置失败: ${error.message}`);
+      logger.info("💡 提示: NVM 仍可通过直接加载脚本正常使用");
+    }
+
     logger.success("✅ Node.js 22.x 安装完成!");
     versionInfo.trim().split('\n').forEach(line => {
       if (line.trim()) {
@@ -169,7 +194,7 @@ export default async function install(): Promise<void> {
     });
 
     logger.info("💡 提示:");
-    logger.info("  - 使用 'source ~/.bashrc' 或重新登录以加载 NVM 环境");
+    logger.info("  - 重新登录或运行 'source ~/.bashrc' 来加载新的环境变量");
     logger.info("  - NVM 已配置，可使用 'nvm use <version>' 切换版本");
 
   } catch (error) {

@@ -1096,6 +1096,290 @@ export async function isCommandAvailable(command: string): Promise<boolean> {
   }
 }
 
+// ========== EEE 环境管理系统 ==========
+
+import { EeeEnvManager, createEnvModule, createVersionManagerModule } from "./eee-env-manager";
+
+/**
+ * 全新的 EEE 环境配置管理系统
+ *
+ * 核心特性：
+ * - ✅ 幂等性：多次运行不产生副作用
+ * - ✅ 完整性：支持环境变量、PATH、aliases、functions
+ * - ✅ 结构化：模块化配置管理
+ * - ✅ 多Shell兼容：bash、zsh等
+ */
+
+// 全局环境管理器实例
+let globalEnvManager: EeeEnvManager | null = null;
+
+/**
+ * 获取或创建全局环境管理器
+ */
+function getEeeEnvManager(): EeeEnvManager {
+  if (!globalEnvManager) {
+    globalEnvManager = new EeeEnvManager({
+      shellIntegration: {
+        bash: true,
+        zsh: true,
+        fish: false,
+      },
+      backup: {
+        enabled: true,
+        maxBackups: 5,
+      },
+    });
+  }
+  return globalEnvManager;
+}
+
+/**
+ * 新的强大版本：配置 EEE 环境
+ *
+ * 替代旧的 configureEeeEnvironment 函数
+ * 支持完整的Shell配置：环境变量、PATH、aliases、functions等
+ *
+ * @param options 环境配置选项
+ */
+export async function configureEeeEnvironment(options: {
+  name: string;
+  description: string;
+  environment?: Record<string, string>;
+  paths?: string[];
+  aliases?: Record<string, string>;
+  functions?: Record<string, string>;
+  customCode?: string[];
+  priority?: number;
+  dependencies?: string[];
+}): Promise<void> {
+  const manager = getEeeEnvManager();
+
+  logger.info(`🔧 配置 EEE 环境模块: ${options.name}`);
+
+  try {
+    // 创建环境模块
+    const module = {
+      name: options.name,
+      description: options.description,
+      config: {
+        environment: options.environment,
+        paths: options.paths,
+        aliases: options.aliases,
+        functions: options.functions,
+        customCode: options.customCode,
+        priority: options.priority ?? 50,
+      },
+      dependencies: options.dependencies,
+    };
+
+    // 添加模块到管理器
+    await manager.addModule(module);
+
+    // 应用配置
+    await manager.applyConfiguration();
+
+    logger.success(`✅ EEE 环境模块 ${options.name} 配置完成`);
+
+  } catch (error) {
+    logger.error(`❌ EEE 环境配置失败: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * 为版本管理器配置环境（简化接口）
+ *
+ * @param name 版本管理器名称（如 "Go Manager", "UV Package Manager"）
+ * @param description 描述
+ * @param environment 环境变量
+ * @param paths PATH 路径数组
+ * @param customCode 自定义Shell代码
+ */
+export async function configureVersionManagerEnvironment(
+  name: string,
+  description: string,
+  environment?: Record<string, string>,
+  paths?: string[],
+  customCode?: string[]
+): Promise<void> {
+  await configureEeeEnvironment({
+    name,
+    description,
+    environment,
+    paths,
+    customCode,
+    priority: 10, // 版本管理器优先级较高
+  });
+}
+
+/**
+ * 为开发工具配置环境（简化接口）
+ *
+ * @param name 工具名称
+ * @param description 描述
+ * @param environment 环境变量
+ * @param aliases 别名配置
+ * @param functions 函数配置
+ */
+export async function configureDevToolEnvironment(
+  name: string,
+  description: string,
+  environment?: Record<string, string>,
+  aliases?: Record<string, string>,
+  functions?: Record<string, string>
+): Promise<void> {
+  await configureEeeEnvironment({
+    name,
+    description,
+    environment,
+    aliases,
+    functions,
+    priority: 30, // 开发工具优先级中等
+  });
+}
+
+/**
+ * 验证当前环境配置
+ */
+export async function validateEeeEnvironment(): Promise<{
+  valid: boolean;
+  issues: string[];
+  info: any;
+}> {
+  const manager = getEeeEnvManager();
+
+  try {
+    const [validation, info] = await Promise.all([
+      manager.validateConfiguration(),
+      manager.getEnvironmentInfo(),
+    ]);
+
+    return {
+      valid: validation.valid,
+      issues: validation.issues,
+      info,
+    };
+  } catch (error) {
+    return {
+      valid: false,
+      issues: [`验证失败: ${error.message}`],
+      info: null,
+    };
+  }
+}
+
+/**
+ * 向后兼容：旧版本函数接口
+ * @deprecated 使用 configureEeeEnvironment 替代
+ */
+export async function legacyConfigureEeeEnvironment(
+  envName: string,
+  envContent: string,
+  currentUser: string
+): Promise<void> {
+  logger.warn(`⚠️ 使用了已废弃的 configureEeeEnvironment 接口，建议升级到新版本`);
+
+  // 解析旧格式的环境内容
+  const environment: Record<string, string> = {};
+  const customCode: string[] = [];
+
+  // 简单解析环境变量和其他内容
+  const lines = envContent.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    if (trimmed.startsWith('export ')) {
+      // 解析 export VAR=value
+      const match = trimmed.match(/^export\s+([A-Z_][A-Z0-9_]*)\s*=\s*(.+)$/);
+      if (match) {
+        const [, key, value] = match;
+        environment[key] = value.replace(/^["']|["']$/g, ''); // 移除引号
+      } else {
+        customCode.push(trimmed);
+      }
+    } else {
+      customCode.push(trimmed);
+    }
+  }
+
+  // 使用新接口
+  await configureEeeEnvironment({
+    name: envName,
+    description: `从旧接口迁移: ${envName}`,
+    environment: Object.keys(environment).length > 0 ? environment : undefined,
+    customCode: customCode.length > 0 ? customCode : undefined,
+    priority: 50,
+  });
+}
+
+/**
+ * 配置 ZSH 环境（用于 post_install.ts）
+ * @param currentUser 目标用户
+ */
+export async function configureZshIntegration(currentUser: string): Promise<void> {
+  const userHome = getUserHome(currentUser);
+  const zshrcPath = `${userHome}/.zshrc`;
+
+  logger.info("==> 配置 ZSH 集成 ~/.eee-env");
+
+  // 检查是否安装了 ZSH
+  const zshExists = await tryExecute(
+    async () => {
+      const result = await runAsUserScript("command -v zsh", currentUser);
+      return result.trim().length > 0;
+    },
+    () => false
+  );
+
+  if (!zshExists) {
+    logger.info("  > ZSH 未安装，跳过 .zshrc 配置");
+    return;
+  }
+
+  // 检查 .zshrc 是否存在
+  const zshrcExists = await tryExecute(
+    async () => {
+      await runAsUserScript(`test -f "${zshrcPath}"`, currentUser);
+      return true;
+    },
+    () => false
+  );
+
+  if (!zshrcExists) {
+    // 创建 .zshrc
+    await runAsUserScript(`touch "${zshrcPath}"`, currentUser);
+    logger.info("  > 创建 .zshrc 文件");
+  }
+
+  // 检查 .zshrc 是否已经配置 source ~/.eee-env
+  const checkScript = `
+if grep -q "source.*\\.eee-env" "${zshrcPath}"; then
+  echo "exists"
+else
+  echo "missing"
+fi`;
+
+  const exists = await runAsUserScript(checkScript, currentUser);
+
+  if (exists.trim() === "exists") {
+    logger.info("  > .zshrc 已配置 ~/.eee-env 集成");
+    return;
+  }
+
+  // 添加 source 命令到 .zshrc
+  const sourceCommand = `
+# EEE Development Environment
+if [ -f "$HOME/.eee-env" ]; then
+  source "$HOME/.eee-env"
+fi`;
+
+  const appendScript = `echo '${sourceCommand}' >> "${zshrcPath}"`;
+  await runAsUserScript(appendScript, currentUser);
+
+  logger.success("✅ ZSH 已配置加载 ~/.eee-env");
+}
+
 /**
  * 重新导出 logger，方便其他包导入
  */

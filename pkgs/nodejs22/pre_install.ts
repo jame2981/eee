@@ -16,6 +16,12 @@ import {
 
 import { logger } from "@/logger";
 
+import {
+  initializeEeeEnv,
+  addEnvironmentVariable,
+  addSource
+} from "@/env-utils";
+
 export default async function preInstall(): Promise<void> {
   logger.info("🔧 开始安装 Node.js 依赖: NVM...");
 
@@ -77,6 +83,19 @@ export default async function preInstall(): Promise<void> {
       [ -s '$NVM_DIR/nvm.sh' ] && source '$NVM_DIR/nvm.sh'
       nvm --version
     `, currentUser);
+
+    // 5. 配置 NVM 环境变量到统一的 ~/.eee-env
+    logger.info("==> 配置 NVM 环境变量...");
+
+    // 初始化 eee-env 环境
+    await initializeEeeEnv();
+
+    // 添加 NVM 环境变量
+    await addEnvironmentVariable("NVM_DIR", nvmDir, "NVM (Node Version Manager) 安装目录");
+
+    // 添加 NVM 脚本加载配置
+    await addSource("$NVM_DIR/nvm.sh", "加载 NVM 主要功能");
+    await addSource("$NVM_DIR/bash_completion", "加载 NVM bash 自动补全");
 
     logger.success("✅ NVM 依赖安装完成!");
     logger.info(`==> NVM 版本: ${nvmTestResult.trim()}`);

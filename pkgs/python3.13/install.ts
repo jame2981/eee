@@ -17,6 +17,11 @@ import {
   logger
 } from "@/pkg-utils";
 
+import {
+  initializeEeeEnv,
+  insertPath
+} from "@/env-utils";
+
 export default async function install(): Promise<void> {
   logger.info("🐍 开始安装 Python 3.13...");
 
@@ -44,7 +49,7 @@ fi`;
 
     logger.info("✅ UV 依赖验证通过");
 
-    // 2. 检查 Python 3.13 是否已安装
+    // 2. 检查 Python 3.13 是否已安装，但无论如何都继续执行后续步骤
     logger.info("==> 检查 Python 3.13 安装状态...");
     const pythonCheckScript = `set -e
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
@@ -62,16 +67,11 @@ fi`;
     if (pythonCheckResult.includes("already installed")) {
       logger.success("✅ Python 3.13 已安装");
       logger.info(`    ${pythonCheckResult.trim()}`);
+    } else {
+      logger.info("==> Python 3.13 未安装，开始安装...");
 
-      // 仍需创建符号链接
-      await createSystemLinks(currentUser);
-      return;
-    }
-
-    logger.info("==> Python 3.13 未安装，开始安装...");
-
-    // 3. 使用 UV 安装 Python 3.13
-    const pythonInstallScript = `#!/bin/bash
+      // 3. 使用 UV 安装 Python 3.13
+      const pythonInstallScript = `#!/bin/bash
 # UV Python 安装脚本 - 强制使用 bash
 set -e  # 遇到错误立即退出
 
@@ -103,23 +103,40 @@ uv python pin 3.13
 
 echo "✅ Python 3.13 安装完成"`;
 
-    try {
-      const result = await runAsUserScript(pythonInstallScript, currentUser);
-      logger.info("==> Python 3.13 安装结果:");
-      result.split('\n').forEach(line => {
-        if (line.trim()) {
-          logger.info(`    ${line.trim()}`);
-        }
-      });
-    } catch (scriptError) {
-      logger.error(`==> Python 3.13 安装失败: ${scriptError.message}`);
-      throw scriptError;
+      try {
+        const result = await runAsUserScript(pythonInstallScript, currentUser);
+        logger.info("==> Python 3.13 安装结果:");
+        result.split('\n').forEach(line => {
+          if (line.trim()) {
+            logger.info(`    ${line.trim()}`);
+          }
+        });
+      } catch (scriptError) {
+        logger.error(`==> Python 3.13 安装失败: ${scriptError.message}`);
+        throw scriptError;
+      }
     }
 
-    // 4. 创建系统级符号链接
+    // 4. 无论是否已安装，都执行环境配置（幂等操作）
+    logger.info("==> 配置 Python 3.13 环境变量...");
+    try {
+      // 初始化 eee-env 环境
+      await initializeEeeEnv();
+
+      // 添加 UV PATH 配置（与 pre_install.ts 保持一致）
+      await insertPath("$HOME/.local/bin", "UV Python Package Manager - Local Binaries");
+      await insertPath("$HOME/.cargo/bin", "UV Python Package Manager - Cargo Binaries");
+
+      logger.success("✅ Python 3.13 环境配置完成");
+    } catch (error) {
+      logger.warn(`⚠️ 环境变量配置失败: ${error.message}`);
+      logger.info("💡 提示: Python 3.13 仍可通过 UV 正常使用");
+    }
+
+    // 5. 创建系统级符号链接
     await createSystemLinks(currentUser);
 
-    // 5. 最终验证
+    // 6. 最终验证
     logger.info("==> 最终验证 Python 3.13 安装...");
 
     const finalVerifyScript = `set -e
