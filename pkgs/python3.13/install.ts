@@ -15,12 +15,12 @@ import {
   createSymlink,
   isCommandAvailable,
   logger
-} from "@/pkg-utils";
+} from "../../src/pkg-utils";
 
 import {
   initializeEeeEnv,
   insertPath
-} from "@/env-utils";
+} from "../../src/env-utils";
 
 export default async function install(): Promise<void> {
   logger.info("🐍 开始安装 Python 3.13...");

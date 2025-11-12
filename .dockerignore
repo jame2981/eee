@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+
+# Node modules
+node_modules
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Documentation
+*.md
+!README.md
+
+# Test and build artifacts
+*.log
+.DS_Store
+
+# Scripts
+test-docker.sh
+run-with-proxy.sh
+configure-sudo-proxy.sh
+
+# Claude
+.claude

@@ -7,8 +7,8 @@
  */
 
 import { $ } from "bun";
-import { _aptUpdate, aptInstall } from "@/pkg-utils";
-import { logger } from "@/logger";
+import { _aptUpdate, aptInstall } from "../../src/pkg-utils";
+import { logger } from "../../src/logger";
 
 export default async function install(): Promise<void> {
   logger.info("📦 开始更新和升级系统包...");

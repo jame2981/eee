@@ -19,6 +19,11 @@ ENV PATH="/home/devuser/.bun/bin:$PATH"
 
 # 复制项目文件并设置权限
 COPY --chown=devuser:devuser . .
+
+# 安装项目依赖
+RUN bun install
+
+# 设置可执行权限
 RUN chmod +x env/*.ts
 
 # 设置环境变量用于 pkg-utils

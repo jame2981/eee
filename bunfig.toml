@@ -1,0 +1,9 @@
+# Bun configuration
+
+[loader]
+".ts" = "tsx"
+".tsx" = "tsx"
+
+# Path mapping to match tsconfig.json
+[path]
+"@/*" = ["./src/*"]

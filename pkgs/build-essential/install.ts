@@ -6,8 +6,8 @@
  * 安装编译工具链和开发依赖
  */
 
-import { aptInstall } from "@/pkg-utils";
-import { logger } from "@/logger";
+import { aptInstall } from "../../src/pkg-utils";
+import { logger } from "../../src/logger";
 
 export default async function install(): Promise<void> {
   logger.info("🔧 开始安装编译工具链...");

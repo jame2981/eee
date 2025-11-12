@@ -13,13 +13,13 @@ import {
   runAsUserScript,
   createSymlink,
   logger
-} from "@/pkg-utils";
+} from "../../src/pkg-utils";
 
 import {
   initializeEeeEnv,
   addEnvironmentVariable,
   addSource
-} from "@/env-utils";
+} from "../../src/env-utils";
 
 export default async function install(): Promise<void> {
   logger.info("📦 开始安装 Node.js 22.x...");

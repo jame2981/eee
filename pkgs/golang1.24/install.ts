@@ -20,13 +20,13 @@ import {
   writeUserFile,
   tryExecute,
   logger
-} from "@/pkg-utils";
+} from "../../src/pkg-utils";
 
 import {
   initializeEeeEnv,
   insertPath,
   addEnvironmentVariable
-} from "@/env-utils";
+} from "../../src/env-utils";
 
 export default async function install(): Promise<void> {
   logger.info("🐹 开始安装 Go 1.24.3 (使用 goup)...");

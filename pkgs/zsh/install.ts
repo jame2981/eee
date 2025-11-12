@@ -7,8 +7,8 @@
  * 纯净安装，仅安装 zsh 包
  */
 
-import { installAptPackage } from "@/pkg-utils";
-import { logger } from "@/logger";
+import { installAptPackage } from "../../src/pkg-utils";
+import { logger } from "../../src/logger";
 
 export default async function install(): Promise<void> {
   logger.info("🐚 开始安装 Zsh...");

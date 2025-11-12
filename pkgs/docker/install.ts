@@ -19,7 +19,7 @@ import {
   isCommandAvailable,
   isPackageInstalled,
   logger
-} from "@/pkg-utils";
+} from "../../src/pkg-utils";
 
 export default async function install(): Promise<void> {
   logger.info("🐳 开始安装 Docker...");

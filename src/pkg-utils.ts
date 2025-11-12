@@ -16,54 +16,102 @@
 import { $ } from "bun";
 import { logger } from "./logger";
 
-// ========== 模块化重导出 ==========
-// 用户环境管理（已迁移到独立模块）
-export {
+// 导入用户环境管理函数（内部使用）
+import {
   type UserEnv,
-  getUserEnv,
-  getCurrentUser,
-  getUserPrimaryGroup,
-  getUserHome,
-  isRoot,
-  requireRoot,
-  addUserToGroup,
+  getUserEnv as _internalGetUserEnv,
+  getCurrentUser as _internalGetCurrentUser,
+  getUserPrimaryGroup as _internalGetUserPrimaryGroup,
+  getUserHome as _internalGetUserHome,
+  isRoot as _internalIsRoot,
+  requireRoot as _internalRequireRoot,
+  addUserToGroup as _internalAddUserToGroup,
 } from "./user/user-env";
 
-// 脚本执行（已迁移到独立模块）
-export {
-  runAsUser,
-  runAsUserScript,
-  runAsRootScript,
-  runAsUserWithEnv,
+// 导入脚本执行函数（内部使用）
+import {
+  runAsUser as _internalRunAsUser,
+  runAsUserScript as _internalRunAsUserScript,
+  runAsRootScript as _internalRunAsRootScript,
+  runAsUserWithEnv as _internalRunAsUserWithEnv,
 } from "./shell/script-executor";
 
-// 系统信息（已迁移到独立模块）
-export {
+// 导入系统信息函数（内部使用）
+import {
   type SystemInfo,
-  detectOS,
-  detectDistro,
-  detectArch,
-  detectPackageManager,
-  getSystemInfo,
-  checkSystemCompatibility,
-  isDebianBased,
-  isWSL,
-  checkNetworkConnection,
-  verifyCommand,
-  getCommandVersion,
+  detectOS as _internalDetectOS,
+  detectDistro as _internalDetectDistro,
+  detectArch as _internalDetectArch,
+  detectPackageManager as _internalDetectPackageManager,
+  getSystemInfo as _internalGetSystemInfo,
+  checkSystemCompatibility as _internalCheckSystemCompatibility,
+  isDebianBased as _internalIsDebianBased,
+  isWSL as _internalIsWSL,
+  checkNetworkConnection as _internalCheckNetworkConnection,
+  verifyCommand as _internalVerifyCommand,
+  getCommandVersion as _internalGetCommandVersion,
 } from "./system/system-info";
 
-// 包管理（已迁移到独立模块）
+// 导入包管理函数（内部使用）
+import {
+  _aptUpdate,
+  aptUpdate as _internalAptUpdate,
+  aptInstall as _internalAptInstall,
+  aptRemove as _internalAptRemove,
+  addPpa as _internalAddPpa,
+  addGpgKey as _internalAddGpgKey,
+  addRepository as _internalAddRepository,
+  isPackageInstalled as _internalIsPackageInstalled,
+} from "./package/apt";
+
+// ========== 模块化重导出 ==========
+// 用户环境管理（重新导出）
+export {
+  type UserEnv,
+  _internalGetUserEnv as getUserEnv,
+  _internalGetCurrentUser as getCurrentUser,
+  _internalGetUserPrimaryGroup as getUserPrimaryGroup,
+  _internalGetUserHome as getUserHome,
+  _internalIsRoot as isRoot,
+  _internalRequireRoot as requireRoot,
+  _internalAddUserToGroup as addUserToGroup,
+};
+
+// 脚本执行（重新导出）
+export {
+  _internalRunAsUser as runAsUser,
+  _internalRunAsUserScript as runAsUserScript,
+  _internalRunAsRootScript as runAsRootScript,
+  _internalRunAsUserWithEnv as runAsUserWithEnv,
+};
+
+// 系统信息（重新导出）
+export {
+  type SystemInfo,
+  _internalDetectOS as detectOS,
+  _internalDetectDistro as detectDistro,
+  _internalDetectArch as detectArch,
+  _internalDetectPackageManager as detectPackageManager,
+  _internalGetSystemInfo as getSystemInfo,
+  _internalCheckSystemCompatibility as checkSystemCompatibility,
+  _internalIsDebianBased as isDebianBased,
+  _internalIsWSL as isWSL,
+  _internalCheckNetworkConnection as checkNetworkConnection,
+  _internalVerifyCommand as verifyCommand,
+  _internalGetCommandVersion as getCommandVersion,
+};
+
+// 包管理（重新导出）
 export {
   _aptUpdate,
-  aptUpdate,
-  aptInstall,
-  aptRemove,
-  addPpa,
-  addGpgKey,
-  addRepository,
-  isPackageInstalled,
-} from "./package/apt";
+  _internalAptUpdate as aptUpdate,
+  _internalAptInstall as aptInstall,
+  _internalAptRemove as aptRemove,
+  _internalAddPpa as addPpa,
+  _internalAddGpgKey as addGpgKey,
+  _internalAddRepository as addRepository,
+  _internalIsPackageInstalled as isPackageInstalled,
+};
 
 // ========== APT 环境配置 ==========
 
@@ -85,8 +133,8 @@ const APT_ENV = {
  * 用于软件安装后刷新PATH和其他环境变量
  */
 export async function reloadEnv(user?: string): Promise<void> {
-  const targetUser = user || getCurrentUser();
-  const userHome = getUserHome(targetUser);
+  const targetUser = user || _internalGetCurrentUser();
+  const userHome = _internalGetUserHome(targetUser);
 
   logger.info("==> 重新加载环境变量...");
 
@@ -146,7 +194,7 @@ export async function reloadEnv(user?: string): Promise<void> {
     `;
 
     // 执行重新加载脚本
-    const result = await runAsUserScript(reloadScript, targetUser);
+    const result = await _internalRunAsUserScript(reloadScript, targetUser);
 
     logger.info("==> 环境变量重新加载结果:");
     result.split('\n').forEach(line => {
@@ -175,7 +223,7 @@ export async function reloadEnv(user?: string): Promise<void> {
  * 创建用户文件
  */
 export async function writeUserFile(path: string, content: string, user?: string): Promise<void> {
-  const targetUser = user || getCurrentUser();
+  const targetUser = user || _internalGetCurrentUser();
 
   await Bun.write(path, content);
   await setUserOwnership(path, targetUser);
@@ -187,7 +235,7 @@ export async function writeUserFile(path: string, content: string, user?: string
  * 创建用户目录
  */
 export async function createUserDir(path: string, user?: string, mode = "755"): Promise<void> {
-  const targetUser = user || getCurrentUser();
+  const targetUser = user || _internalGetCurrentUser();
 
   await $`mkdir -p ${path}`;
   await $`chmod ${mode} ${path}`;
@@ -200,11 +248,11 @@ export async function createUserDir(path: string, user?: string, mode = "755"): 
  * 设置文件/目录所有权
  */
 export async function setUserOwnership(path: string, user?: string): Promise<void> {
-  const targetUser = user || getCurrentUser();
+  const targetUser = user || _internalGetCurrentUser();
 
   if (targetUser !== "root") {
     // 获取用户的主组名，而不是假设用户名等于组名
-    const primaryGroup = await getUserPrimaryGroup(targetUser);
+    const primaryGroup = await _internalGetUserPrimaryGroup(targetUser);
     await $`chown -R ${targetUser}:${primaryGroup} ${path}`;
     logger.info(`==> 设置文件所有权: ${path} -> ${targetUser}:${primaryGroup}`);
   }
@@ -214,8 +262,8 @@ export async function setUserOwnership(path: string, user?: string): Promise<voi
  * 复制文件到用户主目录
  */
 export async function copyToUserHome(src: string, dest: string, user?: string): Promise<void> {
-  const targetUser = user || getCurrentUser();
-  const userHome = getUserHome(targetUser);
+  const targetUser = user || _internalGetCurrentUser();
+  const userHome = _internalGetUserHome(targetUser);
   const destPath = `${userHome}/${dest}`;
 
   await $`cp ${src} ${destPath}`;
@@ -241,7 +289,7 @@ else
   echo "systemd not available in this environment; skip enabling ${service}"
 fi`;
 
-  await runAsRootScript(enableScript);
+  await _internalRunAsRootScript(enableScript);
 }
 
 /**
@@ -259,7 +307,7 @@ else
   echo "systemd not available in this environment; skip starting ${service}"
 fi`;
 
-  await runAsRootScript(startScript);
+  await _internalRunAsRootScript(startScript);
 }
 
 /**
@@ -277,7 +325,7 @@ else
   echo "systemd not available in this environment; skip restarting ${service}"
 fi`;
 
-  await runAsRootScript(restartScript);
+  await _internalRunAsRootScript(restartScript);
 }
 
 // addUserToGroup 已迁移到 src/user/user-env.ts
@@ -295,7 +343,7 @@ export async function createSymlink(src: string, dest: string): Promise<void> {
 # 创建符号链接
 ln -sf ${src} ${dest}`;
 
-  await runAsRootScript(symlinkScript);
+  await _internalRunAsRootScript(symlinkScript);
 }
 
 /**
@@ -314,7 +362,7 @@ export async function createBinSymlink(binPath: string, binName: string): Promis
  */
 export async function testUserCommand(command: string, user?: string): Promise<boolean> {
   try {
-    await runAsUser(`which ${command}`, user);
+    await _internalRunAsUser(`which ${command}`, user);
     return true;
   } catch {
     return false;
@@ -338,8 +386,8 @@ export async function writeConfigTemplate(
   prefix: string,
   user?: string
 ): Promise<void> {
-  const targetUser = user || getCurrentUser();
-  const userHome = getUserHome(targetUser);
+  const targetUser = user || _internalGetCurrentUser();
+  const userHome = _internalGetUserHome(targetUser);
 
   // 写入别名文件
   if (template.aliases) {
@@ -401,14 +449,14 @@ export async function downloadAndRunScript(url: string, user?: string): Promise<
   logger.info(`==> 下载并执行脚本: ${url}`);
 
   const script = await downloadFile(url);
-  return await runAsUserScript(script, user);
+  return await _internalRunAsUserScript(script, user);
 }
 
 /**
  * 使用 curl 安装（常见的安装模式）
  */
 export async function curlInstall(url: string, user?: string): Promise<void> {
-  const targetUser = user || getCurrentUser();
+  const targetUser = user || _internalGetCurrentUser();
 
   logger.info(`==> Curl 安装: ${url}`);
 
@@ -462,7 +510,7 @@ export interface PackageInfo {
 export async function checkPackageInstalled(checkCommand: string): Promise<{ installed: boolean; version?: string }> {
   try {
     // 使用 runAsRootScript 来执行检查命令，确保有足够权限访问 dpkg 数据库
-    const output = await runAsRootScript(checkCommand);
+    const output = await _internalRunAsRootScript(checkCommand);
     return {
       installed: true,
       version: output.trim().split('\n')[0] // 取第一行作为版本信息
@@ -523,7 +571,7 @@ export async function installAptPackage(
 
   // 执行 APT 安装
   try {
-    await aptInstall(packages);
+    await _internalAptInstall(packages);
 
     // 再次检查安装结果
     if (checkCommand) {
@@ -551,7 +599,7 @@ export async function installPackagesWithFallback(
   packageManager: string,
   user?: string
 ): Promise<{ success: string[], failed: string[] }> {
-  const targetUser = user || getCurrentUser();
+  const targetUser = user || _internalGetCurrentUser();
   const results = { success: [], failed: [] };
 
   for (const pkg of packages) {
@@ -560,7 +608,7 @@ export async function installPackagesWithFallback(
         ? packageManager.replace('${package}', pkg)
         : `${packageManager} ${pkg}`;
 
-      await runAsUser(cmd, targetUser);
+      await _internalRunAsUser(cmd, targetUser);
       results.success.push(pkg);
       logger.success(`  ✓ ${pkg} 安装成功`);
     } catch (error) {
@@ -811,7 +859,7 @@ export async function legacyConfigureEeeEnvironment(
  * @param currentUser 目标用户
  */
 export async function configureZshIntegration(currentUser: string): Promise<void> {
-  const userHome = getUserHome(currentUser);
+  const userHome = _internalGetUserHome(currentUser);
   const zshrcPath = `${userHome}/.zshrc`;
 
   logger.info("==> 配置 ZSH 集成 ~/.eee-env");
@@ -819,7 +867,7 @@ export async function configureZshIntegration(currentUser: string): Promise<void
   // 检查是否安装了 ZSH
   const zshExists = await tryExecute(
     async () => {
-      const result = await runAsUserScript("command -v zsh", currentUser);
+      const result = await _internalRunAsUserScript("command -v zsh", currentUser);
       return result.trim().length > 0;
     },
     () => false
@@ -833,7 +881,7 @@ export async function configureZshIntegration(currentUser: string): Promise<void
   // 检查 .zshrc 是否存在
   const zshrcExists = await tryExecute(
     async () => {
-      await runAsUserScript(`test -f "${zshrcPath}"`, currentUser);
+      await _internalRunAsUserScript(`test -f "${zshrcPath}"`, currentUser);
       return true;
     },
     () => false
@@ -841,7 +889,7 @@ export async function configureZshIntegration(currentUser: string): Promise<void
 
   if (!zshrcExists) {
     // 创建 .zshrc
-    await runAsUserScript(`touch "${zshrcPath}"`, currentUser);
+    await _internalRunAsUserScript(`touch "${zshrcPath}"`, currentUser);
     logger.info("  > 创建 .zshrc 文件");
   }
 
@@ -853,7 +901,7 @@ else
   echo "missing"
 fi`;
 
-  const exists = await runAsUserScript(checkScript, currentUser);
+  const exists = await _internalRunAsUserScript(checkScript, currentUser);
 
   if (exists.trim() === "exists") {
     logger.info("  > .zshrc 已配置 ~/.eee-env 集成");
@@ -868,7 +916,7 @@ if [ -f "$HOME/.eee-env" ]; then
 fi`;
 
   const appendScript = `echo '${sourceCommand}' >> "${zshrcPath}"`;
-  await runAsUserScript(appendScript, currentUser);
+  await _internalRunAsUserScript(appendScript, currentUser);
 
   logger.success("✅ ZSH 已配置加载 ~/.eee-env");
 }
