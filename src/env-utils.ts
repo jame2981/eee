@@ -3,85 +3,78 @@
 /**
  * src/env-utils.ts
  *
- * EEE 环境变量管理工具函数
- * 提供简单实用的环境配置操作
+ * EEE 环境变量管理工具函数 - 兼容层
+ *
+ * ⚠️ 本文件为向后兼容层，内部使用 eee-env-manager.ts 实现
+ * ⚠️ 新代码建议直接使用 EeeEnvManager 类获得更强大的功能
+ *
+ * 提供简单的函数式API，适合快速使用
  */
 
-import {
-  getCurrentUser,
-  getUserHome,
-  logger
-} from "@/pkg-utils";
+import { EeeEnvManager } from "./eee-env-manager";
+import { getCurrentUser } from "./pkg-utils";
+import { logger } from "./logger";
 
-import { promises as fs } from "fs";
-import { join } from "path";
+// 全局管理器实例（用于兼容层）
+let sharedManager: EeeEnvManager | null = null;
 
 /**
- * 获取用户的 ~/.eee-env 文件路径
+ * 获取共享的环境管理器实例
  */
-function getEeeEnvPath(): string {
-  const currentUser = getCurrentUser();
-  const userHome = getUserHome(currentUser);
-  return join(userHome, ".eee-env");
+function getSharedManager(): EeeEnvManager {
+  if (!sharedManager) {
+    sharedManager = new EeeEnvManager({
+      shellIntegration: {
+        bash: true,
+        zsh: true,
+        fish: false,
+      },
+      backup: {
+        enabled: true,
+        maxBackups: 5,
+      },
+    });
+  }
+  return sharedManager;
+}
+
+/**
+ * 生成唯一的模块名称（用于临时模块）
+ */
+let moduleCounter = 0;
+function generateModuleName(prefix: string): string {
+  return `${prefix}-${Date.now()}-${++moduleCounter}`;
 }
 
 /**
  * insertPath - 追加路径到 PATH 开头，防止重复追加
- * 参照 shell 脚本的 case 语句实现，使用 :${PATH}: 模式检查
  *
  * @param pathToAdd - 要添加到 PATH 的路径
  * @param comment - 可选的注释说明
  */
 export async function insertPath(pathToAdd: string, comment?: string): Promise<void> {
-  const eeeEnvPath = getEeeEnvPath();
+  const manager = getSharedManager();
+  const moduleName = generateModuleName("path");
 
   try {
-    // 读取现有文件内容，如果文件不存在则创建空内容
-    let content = '';
-    try {
-      content = await fs.readFile(eeeEnvPath, 'utf-8');
-    } catch (error) {
-      // 文件不存在，创建新文件
-      logger.info(`创建新的环境配置文件: ${eeeEnvPath}`);
-    }
+    await manager.addModule({
+      name: moduleName,
+      description: comment || `Add ${pathToAdd} to PATH`,
+      config: {
+        paths: [pathToAdd],
+        priority: 10, // 路径配置优先级较高
+      },
+    });
 
-    // 检查是否已经有相同路径的配置块，避免重复添加整个配置
-    const pathConfigPattern = new RegExp(`case.*${pathToAdd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*esac`, 's');
-    if (pathConfigPattern.test(content)) {
-      logger.info(`路径 ${pathToAdd} 的配置块已存在，跳过添加`);
-      return;
-    }
-
-    // 构建新的 PATH 配置块（参照您提供的 shell 脚本）
-    const pathConfigLines = [];
-
-    if (comment) {
-      pathConfigLines.push(`# ${comment}`);
-    }
-
-    pathConfigLines.push(
-      `case ":$\{PATH}:" in`,
-      `    *:"${pathToAdd}":*)`,
-      `        ;;`,
-      `    *)`,
-      `        # Prepending path to prioritize development tools over system binaries`,
-      `        export PATH="${pathToAdd}:$PATH"`,
-      `        ;;`,
-      `esac`
-    );
-
-    // 在文件末尾添加新的 PATH 配置块
-    const separator = content && !content.endsWith('\n') ? '\n' : '';
-    const newContent = content + separator + pathConfigLines.join('\n') + '\n';
-
-    // 写入文件
-    await fs.writeFile(eeeEnvPath, newContent, 'utf-8');
-
-    logger.success(`✅ 成功添加路径到 PATH: ${pathToAdd}`);
-
+    await manager.applyConfiguration();
+    logger.success(`成功添加路径到 PATH: ${pathToAdd}`);
   } catch (error) {
-    logger.error(`❌ 添加路径到 PATH 失败: ${error.message}`);
-    throw error;
+    // 如果模块已存在或路径已存在，这是正常的
+    if (error.message?.includes("已存在") || error.message?.includes("already exists")) {
+      logger.info(`路径 ${pathToAdd} 已存在，跳过添加`);
+    } else {
+      throw error;
+    }
   }
 }
 
@@ -93,54 +86,32 @@ export async function insertPath(pathToAdd: string, comment?: string): Promise<v
  * @param checkExists - 是否需要检查文件存在（默认 true）
  */
 export async function addSource(sourceFile: string, comment?: string, checkExists: boolean = true): Promise<void> {
-  const eeeEnvPath = getEeeEnvPath();
+  const manager = getSharedManager();
+  const moduleName = generateModuleName("source");
 
   try {
-    // 读取现有文件内容，如果文件不存在则创建空内容
-    let content = '';
-    try {
-      content = await fs.readFile(eeeEnvPath, 'utf-8');
-    } catch (error) {
-      // 文件不存在，创建新文件
-      logger.info(`创建新的环境配置文件: ${eeeEnvPath}`);
-    }
+    // 构建 source 命令
+    const sourceLine = checkExists
+      ? `[ -s "${sourceFile}" ] && source "${sourceFile}"`
+      : `source "${sourceFile}"`;
 
-    // 检查是否已经存在相同的 source 配置，避免重复添加
-    const sourcePattern = new RegExp(`source\\s+["']?${sourceFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g');
-    if (sourcePattern.test(content)) {
-      logger.info(`Source 配置 ${sourceFile} 已存在，跳过添加`);
-      return;
-    }
+    await manager.addModule({
+      name: moduleName,
+      description: comment || `Source ${sourceFile}`,
+      config: {
+        customCode: [sourceLine],
+        priority: 50, // source 配置使用中等优先级
+      },
+    });
 
-    // 构建 source 配置行
-    let sourceLine: string;
-    if (checkExists) {
-      // 添加文件存在性检查
-      sourceLine = `[ -s "${sourceFile}" ] && source "${sourceFile}"`;
-    } else {
-      // 直接 source
-      sourceLine = `source "${sourceFile}"`;
-    }
-
-    // 构建要添加的内容
-    const newLines = [];
-    if (comment) {
-      newLines.push(`# ${comment}`);
-    }
-    newLines.push(sourceLine);
-
-    // 在文件末尾添加新的 source 配置
-    const separator = content && !content.endsWith('\n') ? '\n' : '';
-    const newContent = content + separator + newLines.join('\n') + '\n';
-
-    // 写入文件
-    await fs.writeFile(eeeEnvPath, newContent, 'utf-8');
-
-    logger.success(`✅ 成功添加 source 配置: ${sourceFile}`);
-
+    await manager.applyConfiguration();
+    logger.success(`成功添加 source 配置: ${sourceFile}`);
   } catch (error) {
-    logger.error(`❌ 添加 source 配置失败: ${error.message}`);
-    throw error;
+    if (error.message?.includes("已存在") || error.message?.includes("already exists")) {
+      logger.info(`Source 配置 ${sourceFile} 已存在，跳过添加`);
+    } else {
+      throw error;
+    }
   }
 }
 
@@ -152,46 +123,29 @@ export async function addSource(sourceFile: string, comment?: string, checkExist
  * @param comment - 可选的注释说明
  */
 export async function addEnvironmentVariable(name: string, value: string, comment?: string): Promise<void> {
-  const eeeEnvPath = getEeeEnvPath();
+  const manager = getSharedManager();
+  const moduleName = generateModuleName("env");
 
   try {
-    // 读取现有文件内容
-    let content = '';
-    try {
-      content = await fs.readFile(eeeEnvPath, 'utf-8');
-    } catch (error) {
-      logger.info(`创建新的环境配置文件: ${eeeEnvPath}`);
-    }
+    await manager.addModule({
+      name: moduleName,
+      description: comment || `Set ${name} environment variable`,
+      config: {
+        environment: {
+          [name]: value,
+        },
+        priority: 30, // 环境变量使用较高优先级
+      },
+    });
 
-    // 检查环境变量是否已经存在
-    const envPattern = new RegExp(`export\\s+${name}=`, 'g');
-    if (envPattern.test(content)) {
-      logger.info(`环境变量 ${name} 已存在，跳过添加`);
-      return;
-    }
-
-    // 构建环境变量配置行
-    const envLine = `export ${name}="${value}"`;
-
-    // 构建要添加的内容
-    const newLines = [];
-    if (comment) {
-      newLines.push(`# ${comment}`);
-    }
-    newLines.push(envLine);
-
-    // 在文件末尾添加新的环境变量配置
-    const separator = content && !content.endsWith('\n') ? '\n' : '';
-    const newContent = content + separator + newLines.join('\n') + '\n';
-
-    // 写入文件
-    await fs.writeFile(eeeEnvPath, newContent, 'utf-8');
-
-    logger.success(`✅ 成功添加环境变量: ${name}=${value}`);
-
+    await manager.applyConfiguration();
+    logger.success(`成功添加环境变量: ${name}=${value}`);
   } catch (error) {
-    logger.error(`❌ 添加环境变量失败: ${error.message}`);
-    throw error;
+    if (error.message?.includes("已存在") || error.message?.includes("already exists")) {
+      logger.info(`环境变量 ${name} 已存在，跳过添加`);
+    } else {
+      throw error;
+    }
   }
 }
 
@@ -200,83 +154,14 @@ export async function addEnvironmentVariable(name: string, value: string, commen
  * 确保 .bashrc 和 .zshrc 会加载 ~/.eee-env
  */
 export async function initializeEeeEnv(): Promise<void> {
-  const currentUser = getCurrentUser();
-  const userHome = getUserHome(currentUser);
-  const eeeEnvPath = getEeeEnvPath();
+  const manager = getSharedManager();
 
   try {
-    // 1. 创建 ~/.eee-env 文件（如果不存在）
-    try {
-      await fs.access(eeeEnvPath);
-      logger.info(`环境配置文件已存在: ${eeeEnvPath}`);
-    } catch {
-      // 文件不存在，创建文件并添加头部注释
-      const initialContent = `#!/bin/bash
-# EEE Environment Configuration
-# This file is automatically managed by EEE (Easy Environment Everywhere)
-# It contains all environment variables, PATH configurations, and shell integrations
-#
-# Generated on: ${new Date().toISOString()}
-#
-
-`;
-      await fs.writeFile(eeeEnvPath, initialContent, 'utf-8');
-      logger.success(`✅ 创建环境配置文件: ${eeeEnvPath}`);
-    }
-
-    // 2. 确保 .bashrc 加载 ~/.eee-env
-    const bashrcPath = join(userHome, '.bashrc');
-    await ensureShellIntegration(bashrcPath, '~/.eee-env', 'Bash');
-
-    // 3. 确保 .zshrc 加载 ~/.eee-env
-    const zshrcPath = join(userHome, '.zshrc');
-    await ensureShellIntegration(zshrcPath, '~/.eee-env', 'ZSH');
-
-    logger.success(`✅ EEE 环境配置初始化完成`);
-
+    // applyConfiguration() 会自动处理配置文件创建和 shell 集成
+    await manager.applyConfiguration();
+    logger.success(`EEE 环境配置初始化完成`);
   } catch (error) {
-    logger.error(`❌ EEE 环境配置初始化失败: ${error.message}`);
-    throw error;
-  }
-}
-
-/**
- * 确保指定的 shell 配置文件会加载 ~/.eee-env
- */
-async function ensureShellIntegration(shellConfigPath: string, eeeEnvFile: string, shellName: string): Promise<void> {
-  try {
-    // 读取现有配置文件内容
-    let content = '';
-    try {
-      content = await fs.readFile(shellConfigPath, 'utf-8');
-    } catch {
-      // 配置文件不存在，创建新文件
-      logger.info(`创建新的 ${shellName} 配置文件: ${shellConfigPath}`);
-    }
-
-    // 检查是否已经有 eee-env 集成配置
-    const sourcePattern = new RegExp(`source\\s+["']?~?\\/?\\.eee-env`, 'g');
-    if (sourcePattern.test(content)) {
-      logger.info(`${shellName} 已配置 EEE 环境集成，跳过配置`);
-      return;
-    }
-
-    // 添加 EEE 环境集成配置
-    const integrationLines = [
-      '',
-      '# EEE Environment Integration',
-      '# Load all EEE environment configurations',
-      `[ -f "${eeeEnvFile}" ] && source "${eeeEnvFile}"`,
-      ''
-    ];
-
-    const newContent = content + integrationLines.join('\n');
-    await fs.writeFile(shellConfigPath, newContent, 'utf-8');
-
-    logger.success(`✅ 配置 ${shellName} EEE 环境集成: ${shellConfigPath}`);
-
-  } catch (error) {
-    logger.error(`❌ 配置 ${shellName} 环境集成失败: ${error.message}`);
+    logger.warn(`EEE 环境配置初始化失败: ${error.message}`);
     throw error;
   }
 }
@@ -285,38 +170,39 @@ async function ensureShellIntegration(shellConfigPath: string, eeeEnvFile: strin
  * getEeeEnvContent - 获取当前 ~/.eee-env 文件内容
  */
 export async function getEeeEnvContent(): Promise<string> {
-  const eeeEnvPath = getEeeEnvPath();
+  const manager = getSharedManager();
 
   try {
-    return await fs.readFile(eeeEnvPath, 'utf-8');
+    // 读取配置文件内容
+    const content = await Bun.file(manager.getConfigPath()).text();
+    return content;
   } catch (error) {
-    logger.info(`环境配置文件不存在: ${eeeEnvPath}`);
+    logger.info(`环境配置文件不存在或无法读取`);
     return '';
   }
 }
 
 /**
  * clearEeeEnv - 清空 ~/.eee-env 文件内容（保留文件结构）
+ *
+ * ⚠️ 注意：此操作会清空所有已配置的环境模块
  */
 export async function clearEeeEnv(): Promise<void> {
-  const eeeEnvPath = getEeeEnvPath();
+  const manager = getSharedManager();
 
   try {
-    const headerContent = `#!/bin/bash
-# EEE Environment Configuration
-# This file is automatically managed by EEE (Easy Environment Everywhere)
-# It contains all environment variables, PATH configurations, and shell integrations
-#
-# Cleared on: ${new Date().toISOString()}
-#
+    // 清空所有模块并重新应用配置
+    manager.clearAllModules();
+    await manager.applyConfiguration();
 
-`;
-
-    await fs.writeFile(eeeEnvPath, headerContent, 'utf-8');
-    logger.success(`✅ 清空环境配置文件: ${eeeEnvPath}`);
-
+    logger.success(`清空环境配置文件完成`);
   } catch (error) {
-    logger.error(`❌ 清空环境配置文件失败: ${error.message}`);
+    logger.warn(`清空环境配置文件失败: ${error.message}`);
     throw error;
   }
 }
+
+/**
+ * 导出 EeeEnvManager 类，供需要更高级功能的代码使用
+ */
+export { EeeEnvManager } from "./eee-env-manager";

@@ -1,9 +1,29 @@
 // src/logger.ts
 
-import chalk from 'chalk';
+import { createConsola, LogLevels } from 'consola';
+
+/**
+ * 创建 consola 日志实例
+ */
+const consola = createConsola({
+  level: process.env.LOG_LEVEL === 'debug' ? LogLevels.debug :
+         process.env.LOG_LEVEL === 'trace' ? LogLevels.trace :
+         LogLevels.info,
+  formatOptions: {
+    colors: true,
+    compact: false,
+    date: false,
+  },
+});
 
 /**
  * 带有美化格式的日志工具
+ * 基于 consola 实现，支持日志级别控制
+ *
+ * 使用方法:
+ * - 默认只显示 info 及以上级别
+ * - 设置 LOG_LEVEL=debug 显示调试信息
+ * - 设置 LOG_LEVEL=trace 显示所有信息
  */
 export const logger = {
   /**
@@ -11,7 +31,7 @@ export const logger = {
    * @param message 日志消息
    */
   step: (message: string) => {
-    console.log(chalk.blue.bold(`\n🚀 ${message}`));
+    consola.log(`\n🚀 ${message}`);
   },
 
   /**
@@ -19,15 +39,15 @@ export const logger = {
    * @param message 日志消息
    */
   info: (message: string) => {
-    console.log(chalk.cyan(`  > ${message}`));
+    consola.info(`  > ${message}`);
   },
 
   /**
-   * 用于输出调试信息
+   * 用于输出调试信息（需要设置 LOG_LEVEL=debug 才会显示）
    * @param message 日志消息
    */
   debug: (message: string) => {
-    console.log(chalk.gray(`  [debug] ${message}`));
+    consola.debug(`  [debug] ${message}`);
   },
 
   /**
@@ -35,7 +55,7 @@ export const logger = {
    * @param message 日志消息
    */
   success: (message: string) => {
-    console.log(chalk.green(`  ✅ ${message}`));
+    consola.success(`  ${message}`);
   },
 
   /**
@@ -43,7 +63,7 @@ export const logger = {
    * @param message 日志消息
    */
   warn: (message: string) => {
-    console.log(chalk.yellow(`  ⚠️  ${message}`));
+    consola.warn(`  ${message}`);
   },
 
   /**
@@ -52,9 +72,10 @@ export const logger = {
    * @param error 可选的错误对象
    */
   error: (message: string, error?: unknown) => {
-    console.error(chalk.red.bold(`\n❌ 严重错误: ${message}`));
     if (error instanceof Error) {
-      console.error(chalk.red(error.stack || error.message));
+      consola.error(`\n❌ 严重错误: ${message}`, error);
+    } else {
+      consola.error(`\n❌ 严重错误: ${message}`);
     }
     process.exit(1);
   },
@@ -64,6 +85,12 @@ export const logger = {
    * @param data 命令输出的 buffer 数据
    */
   cmd: (data: string | Buffer) => {
-    process.stdout.write(chalk.gray(data.toString()));
+    // 命令输出直接写到 stdout，不经过 consola
+    process.stdout.write(data.toString());
   },
+
+  /**
+   * 原始 consola 实例，用于高级用法
+   */
+  raw: consola,
 };

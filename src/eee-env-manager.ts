@@ -15,7 +15,7 @@
  * - ✅ 冲突检测：避免重复和冲突
  */
 
-import { logger } from "@/logger";
+import { logger } from "./logger";
 import { getCurrentUser, getUserHome, runAsUserScript } from "./pkg-utils";
 import { $ } from "bun";
 import path from "path";
@@ -145,6 +145,28 @@ export class EeeEnvManager {
 
     this.modules.delete(moduleName);
     logger.success(`✅ 环境模块 ${moduleName} 已移除`);
+  }
+
+  /**
+   * 获取配置文件路径
+   */
+  getConfigPath(): string {
+    return this.configPath;
+  }
+
+  /**
+   * 清空所有模块
+   */
+  clearAllModules(): void {
+    this.modules.clear();
+    logger.info("🗑️ 已清空所有环境模块");
+  }
+
+  /**
+   * 获取所有模块列表
+   */
+  getAllModules(): EeeEnvModule[] {
+    return Array.from(this.modules.values());
   }
 
   /**

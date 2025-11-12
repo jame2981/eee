@@ -5,10 +5,65 @@
  *
  * 软件包安装工具集
  * 提供统一的工具函数，简化 pre_install.ts/install.ts/post_install.ts 的逻辑
+ *
+ * TODO: 此文件正在逐步模块化拆分中
+ * - ✅ 用户环境管理 -> src/user/user-env.ts
+ * - ⏳ 脚本执行 -> src/shell/script-executor.ts (待迁移)
+ * - ⏳ 系统信息 -> src/system/system-info.ts (待迁移)
+ * - ⏳ 包管理 -> src/package/*.ts (待迁移)
  */
 
 import { $ } from "bun";
-import { logger } from "@/logger";
+import { logger } from "./logger";
+
+// ========== 模块化重导出 ==========
+// 用户环境管理（已迁移到独立模块）
+export {
+  type UserEnv,
+  getUserEnv,
+  getCurrentUser,
+  getUserPrimaryGroup,
+  getUserHome,
+  isRoot,
+  requireRoot,
+  addUserToGroup,
+} from "./user/user-env";
+
+// 脚本执行（已迁移到独立模块）
+export {
+  runAsUser,
+  runAsUserScript,
+  runAsRootScript,
+  runAsUserWithEnv,
+} from "./shell/script-executor";
+
+// 系统信息（已迁移到独立模块）
+export {
+  type SystemInfo,
+  detectOS,
+  detectDistro,
+  detectArch,
+  detectPackageManager,
+  getSystemInfo,
+  checkSystemCompatibility,
+  isDebianBased,
+  isWSL,
+  checkNetworkConnection,
+  verifyCommand,
+  getCommandVersion,
+} from "./system/system-info";
+
+// 包管理（已迁移到独立模块）
+export {
+  _aptUpdate,
+  aptUpdate,
+  aptInstall,
+  aptRemove,
+  addPpa,
+  addGpgKey,
+  addRepository,
+  isPackageInstalled,
+} from "./package/apt";
 
 // ========== APT 环境配置 ==========
 
@@ -322,12 +377,12 @@ export async function runAsUser(command: string, user?: string): Promise<string>
 export async function runAsUserScript(script: string, user?: string): Promise<string> {
   const targetUser = user || getCurrentUser();
 
-  logger.info(`==> 调试: runAsUserScript - 目标用户: ${targetUser}`);
-  logger.info(`==> 调试: runAsUserScript - 脚本长度: ${script.length} 字符`);
+  logger.debug(`runAsUserScript - 目标用户: ${targetUser}`);
+  logger.debug(`runAsUserScript - 脚本长度: ${script.length} 字符`);
 
   // 显示脚本前200字符用于调试
   if (script.length > 0) {
-    logger.info(`==> 调试: runAsUserScript - 脚本前200字符: ${script.substring(0, 200)}`);
+    logger.debug(`runAsUserScript - 脚本前200字符: ${script.substring(0, 200)}`);
   }
 
   try {
@@ -341,7 +396,7 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
 
     try {
       if (targetUser === "root") {
-        logger.info("==> 调试: 以root用户执行脚本");
+        logger.debug("以root用户执行脚本");
         const proc = Bun.spawn(["bash", tmpFile], {
           stdout: "pipe",
           stderr: "pipe"
@@ -356,7 +411,7 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
         }
         result = output;
       } else {
-        logger.info(`==> 调试: 以sudo -u ${targetUser}执行脚本`);
+        logger.debug(`以sudo -u ${targetUser}执行脚本`);
         const proc = Bun.spawn(["sudo", "-u", targetUser, "bash", tmpFile], {
           stdout: "pipe",
           stderr: "pipe"
@@ -376,35 +431,36 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
       await $`rm -f ${tmpFile}`.nothrow();
     }
 
-    logger.info(`==> 调试: runAsUserScript - 脚本执行成功，输出长度: ${result.length} 字符`);
+    logger.debug(`runAsUserScript - 脚本执行成功，输出长度: ${result.length} 字符`);
     if (result.length > 0) {
-      logger.info(`==> 调试: runAsUserScript - 前200字符: ${result.substring(0, 200)}`);
+      logger.debug(`runAsUserScript - 前200字符: ${result.substring(0, 200)}`);
     }
     return result;
   } catch (error) {
-    logger.error(`==> 调试: runAsUserScript - 脚本执行失败: ${error.message}`);
+    // 记录详细的调试信息
+    logger.debug(`runAsUserScript - 脚本执行失败: ${error.message}`);
 
     // 显示执行的脚本内容
-    logger.error(`==> 调试: runAsUserScript - 失败的脚本内容:`);
+    logger.debug(`runAsUserScript - 失败的脚本内容:`);
     script.split('\n').forEach((line, index) => {
-      logger.error(`  ${index + 1}: ${line}`);
+      logger.debug(`  ${index + 1}: ${line}`);
     });
 
     // 显示执行命令
     if (targetUser === "root") {
-      logger.error(`==> 调试: runAsUserScript - 执行命令: bash ${tmpFile}`);
+      logger.debug(`runAsUserScript - 执行命令: bash <tmpfile>`);
     } else {
-      logger.error(`==> 调试: runAsUserScript - 执行命令: sudo -u ${targetUser} bash ${tmpFile}`);
+      logger.debug(`runAsUserScript - 执行命令: sudo -u ${targetUser} bash <tmpfile>`);
     }
 
     // 提取并显示标准错误输出
     if (error.message.includes('stderr:')) {
       const stderrMatch = error.message.match(/stderr: (.+)/);
       if (stderrMatch) {
-        logger.error(`==> 调试: runAsUserScript - 标准错误输出:`);
+        logger.debug(`runAsUserScript - 标准错误输出:`);
         stderrMatch[1].split('\n').forEach(line => {
           if (line.trim()) {
-            logger.error(`    ${line}`);
+            logger.debug(`    ${line}`);
           }
         });
       }
@@ -414,7 +470,7 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
     if (error.message.includes('exit code')) {
       const exitCodeMatch = error.message.match(/exit code (\d+)/);
       if (exitCodeMatch) {
-        logger.error(`==> 调试: runAsUserScript - 退出码: ${exitCodeMatch[1]}`);
+        logger.debug(`runAsUserScript - 退出码: ${exitCodeMatch[1]}`);
       }
     }
 
@@ -427,17 +483,17 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
  * 统一的 root 权限管理，所有 install.ts 需要 root 权限的操作都应使用此函数
  */
 export async function runAsRootScript(script: string): Promise<string> {
-  logger.info(`==> 调试: runAsRootScript - 脚本长度: ${script.length} 字符`);
+  logger.debug(`runAsRootScript - 脚本长度: ${script.length} 字符`);
 
   // 检查当前是否已经是 root
   const currentUser = getCurrentUser();
   if (currentUser === "root") {
-    logger.info("==> 调试: 当前已是 root 用户，直接执行脚本");
+    logger.debug("当前已是 root 用户，直接执行脚本");
     return await runAsUserScript(script, "root");
   }
 
   // 需要提升权限执行
-  logger.info("==> 调试: 以 sudo 提升权限执行脚本");
+  logger.debug("以 sudo 提升权限执行脚本");
 
   try {
     // 将脚本写入临时文件
@@ -454,14 +510,14 @@ export async function runAsRootScript(script: string): Promise<string> {
       await $`sudo rm -f ${tmpFile}`.nothrow();
     }
 
-    logger.info(`==> 调试: runAsRootScript - 脚本执行成功，输出长度: ${result.length} 字符`);
+    logger.debug(`runAsRootScript - 脚本执行成功，输出长度: ${result.length} 字符`);
     if (result.length > 0) {
-      logger.info(`==> 调试: runAsRootScript - 前100字符: ${result.substring(0, 100)}`);
+      logger.debug(`runAsRootScript - 前100字符: ${result.substring(0, 100)}`);
     }
     return result;
   } catch (error) {
-    logger.warn(`==> 调试: runAsRootScript - 脚本执行失败: ${error instanceof Error ? error.message : String(error)}`);
-    logger.warn(`==> 调试: runAsRootScript - 错误详情: ${JSON.stringify(error, null, 2)}`);
+    logger.debug(`runAsRootScript - 脚本执行失败: ${error instanceof Error ? error.message : String(error)}`);
+    logger.debug(`runAsRootScript - 错误详情: ${JSON.stringify(error, null, 2)}`);
     throw error;
   }
 }
@@ -1436,4 +1492,4 @@ fi`;
 /**
  * 重新导出 logger，方便其他包导入
  */
-export { logger } from "@/logger";
+export { logger } from "./logger";
