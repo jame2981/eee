@@ -6,7 +6,6 @@
  * Docker Engine 和 Docker Compose 安装
  */
 
-import { $ } from "bun";
 import {
   getUserEnv,
   aptInstall,
@@ -20,6 +19,7 @@ import {
   isPackageInstalled,
   logger
 } from "../../src/pkg-utils";
+import { execBash } from "../../src/shell/shell-executor";
 
 export default async function install(): Promise<void> {
   logger.info("🐳 开始安装 Docker...");
@@ -34,7 +34,7 @@ export default async function install(): Promise<void> {
 
       // 仍需检查用户是否在 docker 组中
       try {
-        const userGroups = await $`groups ${user}`.text();
+        const userGroups = await execBash(`groups ${user}`);
         if (!userGroups.includes('docker')) {
           logger.info("==> 将用户添加到 docker 组...");
           await addUserToGroup(user, "docker");

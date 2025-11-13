@@ -6,8 +6,8 @@
  * 提供用户信息获取、用户主目录管理等功能
  */
 
-import { $ } from "bun";
 import { logger } from "../logger";
+import { execBash } from "../shell/shell-executor";
 
 /**
  * 用户环境信息
@@ -56,7 +56,7 @@ export async function getUserPrimaryGroup(user?: string): Promise<string> {
 
   try {
     // 使用 id -gn 命令获取用户的主组名
-    const groupName = await $`id -gn ${targetUser}`.text();
+    const groupName = await execBash(`id -gn ${targetUser}`);
     return groupName.trim();
   } catch (error) {
     logger.warn(`⚠️ 无法获取用户 ${targetUser} 的主组，使用用户名作为组名: ${error instanceof Error ? error.message : String(error)}`);
@@ -97,7 +97,7 @@ export async function addUserToGroup(user: string, group: string): Promise<void>
   logger.info(`==> 将用户 ${user} 添加到组 ${group}...`);
 
   try {
-    await $`sudo usermod -aG ${group} ${user}`;
+    await execBash(`sudo usermod -aG ${group} ${user}`);
     logger.success(`✅ 用户 ${user} 已添加到组 ${group}`);
   } catch (error) {
     logger.warn(`❌ 添加用户到组失败: ${error instanceof Error ? error.message : String(error)}`);

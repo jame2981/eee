@@ -32,6 +32,7 @@ const basePackages = [
   "nodejs22",        // 🟢 Node.js 开发环境
   "docker",          // 🐳 容器化开发
   "python3.13",      // 🐍 Python 开发环境
+  "tmux",
   "golang1.24"       // 🐹 Go 开发环境
 ];
 

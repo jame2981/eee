@@ -13,8 +13,8 @@
  * - ⏳ 包管理 -> src/package/*.ts (待迁移)
  */
 
-import { $ } from "bun";
 import { logger } from "./logger";
+import { execCommand, execBash } from "./shell/shell-executor";
 
 // 导入用户环境管理函数（内部使用）
 import {
@@ -237,8 +237,8 @@ export async function writeUserFile(path: string, content: string, user?: string
 export async function createUserDir(path: string, user?: string, mode = "755"): Promise<void> {
   const targetUser = user || _internalGetCurrentUser();
 
-  await $`mkdir -p ${path}`;
-  await $`chmod ${mode} ${path}`;
+  await execCommand("mkdir", ["-p", path]);
+  await execCommand("chmod", [mode, path]);
   await setUserOwnership(path, targetUser);
 
   logger.info(`==> 创建用户目录: ${path}`);
@@ -253,7 +253,7 @@ export async function setUserOwnership(path: string, user?: string): Promise<voi
   if (targetUser !== "root") {
     // 获取用户的主组名，而不是假设用户名等于组名
     const primaryGroup = await _internalGetUserPrimaryGroup(targetUser);
-    await $`chown -R ${targetUser}:${primaryGroup} ${path}`;
+    await execCommand("chown", ["-R", `${targetUser}:${primaryGroup}`, path]);
     logger.info(`==> 设置文件所有权: ${path} -> ${targetUser}:${primaryGroup}`);
   }
 }
@@ -266,7 +266,7 @@ export async function copyToUserHome(src: string, dest: string, user?: string): 
   const userHome = _internalGetUserHome(targetUser);
   const destPath = `${userHome}/${dest}`;
 
-  await $`cp ${src} ${destPath}`;
+  await execCommand("cp", [src, destPath]);
   await setUserOwnership(destPath, targetUser);
 
   logger.info(`==> 复制文件: ${src} -> ${destPath}`);
@@ -435,10 +435,10 @@ export async function writeConfigTemplate(
 export async function downloadFile(url: string, dest?: string): Promise<string> {
   if (dest) {
     logger.info(`==> 下载文件: ${url} -> ${dest}`);
-    await $`curl -fsSL ${url} -o ${dest}`;
+    await execCommand("curl", ["-fsSL", url, "-o", dest]);
     return dest;
   } else {
-    return await $`curl -fsSL ${url}`.text();
+    return await execCommand("curl", ["-fsSL", url]);
   }
 }
 
@@ -461,9 +461,9 @@ export async function curlInstall(url: string, user?: string): Promise<void> {
   logger.info(`==> Curl 安装: ${url}`);
 
   if (targetUser === "root") {
-    await $`curl -fsSL ${url} | bash`;
+    await execBash(`curl -fsSL ${url} | bash`);
   } else {
-    await $`sudo -u ${targetUser} bash -c "curl -fsSL ${url} | bash"`;
+    await execBash(`sudo -u ${targetUser} bash -c "curl -fsSL ${url} | bash"`);
   }
 }
 
@@ -629,12 +629,9 @@ export async function installPackagesWithFallback(
  * 检查命令是否可用
  */
 export async function isCommandAvailable(command: string): Promise<boolean> {
-  try {
-    await $`command -v ${command}`.text();
-    return true;
-  } catch {
-    return false;
-  }
+  // 使用统一的 shell 执行器
+  const { isCommandAvailable: checkCommand } = await import("./shell/shell-executor");
+  return await checkCommand(command);
 }
 
 // ========== EEE 环境管理系统 ==========

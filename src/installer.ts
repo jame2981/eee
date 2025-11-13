@@ -5,7 +5,6 @@
  * 提供可复用的安装逻辑，支持任意环境配置
  */
 
-import { $ } from "bun";
 import { logger } from "@/logger";
 import { requireRoot, getSystemInfo } from "@/pkg-utils";
 

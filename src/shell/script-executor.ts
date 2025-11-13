@@ -6,9 +6,9 @@
  * 提供以不同用户身份执行命令和脚本的功能
  */
 
-import { $ } from "bun";
 import { logger } from "../logger";
 import { getCurrentUser } from "../user/user-env";
+import { execBash, execCommand } from "./shell-executor";
 
 /**
  * 以指定用户身份执行命令
@@ -17,10 +17,10 @@ export async function runAsUser(command: string, user?: string): Promise<string>
   const targetUser = user || getCurrentUser();
 
   if (targetUser === "root") {
-    return await $`${command}`.text();
+    return await execBash(command);
   }
 
-  return await $`sudo -u ${targetUser} ${command}`.text();
+  return await execBash(`sudo -u ${targetUser} ${command}`);
 }
 
 /**
@@ -45,43 +45,21 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
     // 将脚本写入临时文件
     const tmpFile = `/tmp/script-${Date.now()}.sh`;
     await Bun.write(tmpFile, script);
-    await $`chmod +x ${tmpFile}`;
+
+    // 设置可执行权限
+    await execCommand("chmod", ["+x", tmpFile]);
 
     try {
       if (targetUser === "root") {
         logger.debug("以root用户执行脚本");
-        const proc = Bun.spawn(["bash", tmpFile], {
-          stdout: "pipe",
-          stderr: "pipe"
-        });
-        const output = await new Response(proc.stdout).text();
-        const errOutput = await new Response(proc.stderr).text();
-        const exitCode = await proc.exited;
-
-        if (exitCode !== 0) {
-          stderr = errOutput;
-          throw new Error(`Script failed with exit code ${exitCode}. stderr: ${stderr}`);
-        }
-        result = output;
+        result = await execCommand("bash", [tmpFile]);
       } else {
         logger.debug(`以sudo -u ${targetUser}执行脚本`);
-        const proc = Bun.spawn(["sudo", "-u", targetUser, "bash", tmpFile], {
-          stdout: "pipe",
-          stderr: "pipe"
-        });
-        const output = await new Response(proc.stdout).text();
-        const errOutput = await new Response(proc.stderr).text();
-        const exitCode = await proc.exited;
-
-        if (exitCode !== 0) {
-          stderr = errOutput;
-          throw new Error(`Script failed with exit code ${exitCode}. stderr: ${stderr}`);
-        }
-        result = output;
+        result = await execCommand("sudo", ["-u", targetUser, "bash", tmpFile]);
       }
     } finally {
       // 清理临时文件
-      await $`rm -f ${tmpFile}`.nothrow();
+      await execCommand("rm", ["-f", tmpFile]);
     }
 
     logger.debug(`runAsUserScript - 脚本执行成功，输出长度: ${result.length} 字符`);
@@ -152,15 +130,17 @@ export async function runAsRootScript(script: string): Promise<string> {
     // 将脚本写入临时文件
     const tmpFile = `/tmp/root-script-${Date.now()}.sh`;
     await Bun.write(tmpFile, script);
-    await $`chmod +x ${tmpFile}`;
+
+    // 设置可执行权限
+    await execCommand("chmod", ["+x", tmpFile]);
 
     let result: string;
     try {
       // 使用 sudo 执行脚本
-      result = await $`sudo bash ${tmpFile}`.text();
+      result = await execBash(`sudo bash ${tmpFile}`);
     } finally {
       // 清理临时文件
-      await $`sudo rm -f ${tmpFile}`.nothrow();
+      await execCommand("sudo", ["rm", "-f", tmpFile]);
     }
 
     logger.debug(`runAsRootScript - 脚本执行成功，输出长度: ${result.length} 字符`);
@@ -189,8 +169,8 @@ export async function runAsUserWithEnv(
     .join(" ");
 
   if (targetUser === "root") {
-    return await $`env ${envString} ${command}`.text();
+    return await execBash(`env ${envString} ${command}`);
   }
 
-  return await $`sudo -u ${targetUser} env ${envString} ${command}`.text();
+  return await execBash(`sudo -u ${targetUser} env ${envString} ${command}`);
 }

@@ -6,9 +6,9 @@
  * APT 源更换为清华大学镜像源
  */
 
-import { $ } from "bun";
 import { exists } from "node:fs/promises";
 import { logger } from "@/logger";
+import { execCommand, execBash } from "@/shell/shell-executor";
 
 export default async function preInstall(): Promise<void> {
   logger.info("🚀 准备更换 APT 源为清华大学镜像源...");
@@ -24,7 +24,7 @@ export default async function preInstall(): Promise<void> {
     }
 
     logger.info(`==> 正在备份 ${sourcesListPath} 到 ${backupPath}...`);
-    await $`sudo cp ${sourcesListPath} ${backupPath}`;
+    await execCommand("sudo", ["cp", sourcesListPath, backupPath]);
 
     // 使用统一的源配置
     const newSources = `
@@ -37,7 +37,7 @@ deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ noble-security main restricted 
 `;
 
     logger.info("==> 写入新的APT源配置...");
-    await $`echo ${newSources} | sudo tee ${sourcesListPath}`;
+    await execBash(`echo '${newSources}' | sudo tee ${sourcesListPath}`);
 
     logger.success("✅ APT 源更换成功！");
 

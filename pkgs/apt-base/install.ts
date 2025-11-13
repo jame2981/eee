@@ -6,9 +6,9 @@
  * APT 基础包更新和升级
  */
 
-import { $ } from "bun";
 import { _aptUpdate, aptInstall } from "../../src/pkg-utils";
 import { logger } from "../../src/logger";
+import { execBash } from "../../src/shell/shell-executor";
 
 export default async function install(): Promise<void> {
   logger.info("📦 开始更新和升级系统包...");
@@ -23,7 +23,7 @@ export default async function install(): Promise<void> {
 
     // 升级所有包
     logger.info("==> 升级系统包...");
-    await $`APT_LISTCHANGES_FRONTEND=none DEBIAN_FRONTEND=noninteractive apt-get upgrade -y`;
+    await execBash("APT_LISTCHANGES_FRONTEND=none DEBIAN_FRONTEND=noninteractive apt-get upgrade -y");
 
     logger.success("✅ 系统包更新和升级完成!");
 

@@ -17,7 +17,7 @@
 
 import { logger } from "./logger";
 import { getCurrentUser, getUserHome, runAsUserScript } from "./pkg-utils";
-import { $ } from "bun";
+import { execCommand, execBash, execBashWithResult } from "./shell/shell-executor";
 import path from "path";
 
 // ========== 类型定义 ==========
@@ -657,7 +657,11 @@ export class EeeEnvManager {
    * 设置文件权限
    */
   private async setFilePermissions(filePath: string, mode: string): Promise<void> {
-    await $`chmod ${mode} ${filePath}`.nothrow();
+    try {
+      await execCommand("chmod", [mode, filePath]);
+    } catch {
+      // 忽略错误
+    }
   }
 
   /**
@@ -691,8 +695,12 @@ export class EeeEnvManager {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupPath = `${this.configPath}.backup.${timestamp}`;
 
-    await $`cp "${this.configPath}" "${backupPath}"`.nothrow();
-    logger.info(`📦 配置文件已备份: ${backupPath}`);
+    try {
+      await execCommand("cp", [this.configPath, backupPath]);
+      logger.info(`📦 配置文件已备份: ${backupPath}`);
+    } catch {
+      // 忽略备份错误
+    }
 
     // 清理旧备份
     await this.cleanupOldBackups();
@@ -723,7 +731,7 @@ export class EeeEnvManager {
    */
   private async getLastAppliedTime(): Promise<Date | undefined> {
     try {
-      const stat = await $`stat -c %Y "${this.configPath}"`.text();
+      const stat = await execBash(`stat -c %Y "${this.configPath}"`);
       return new Date(parseInt(stat.trim()) * 1000);
     } catch {
       return undefined;

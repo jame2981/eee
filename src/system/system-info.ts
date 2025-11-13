@@ -6,7 +6,7 @@
  * 提供系统信息检测、兼容性检查等功能
  */
 
-import { $ } from "bun";
+import { execBash, execBashWithResult } from "../shell/shell-executor";
 
 /**
  * 系统信息接口
@@ -25,7 +25,7 @@ export interface SystemInfo {
  */
 export async function detectOS(): Promise<string> {
   try {
-    const uname = await $`uname -s`.text();
+    const uname = await execBash("uname -s");
     return uname.trim().toLowerCase();
   } catch {
     return "unknown";
@@ -37,7 +37,7 @@ export async function detectOS(): Promise<string> {
  */
 export async function detectDistro(): Promise<{ distro: string; version: string; ubuntuCodename?: string }> {
   try {
-    const osRelease = await $`cat /etc/os-release`.text();
+    const osRelease = await execBash("cat /etc/os-release");
     const lines = osRelease.split('\n');
 
     let distro = "unknown";
@@ -67,11 +67,11 @@ export async function detectDistro(): Promise<{ distro: string; version: string;
  */
 export async function detectArch(): Promise<string> {
   try {
-    const arch = await $`dpkg --print-architecture`.text();
+    const arch = await execBash("dpkg --print-architecture");
     return arch.trim();
   } catch {
     try {
-      const arch = await $`uname -m`.text();
+      const arch = await execBash("uname -m");
       return arch.trim();
     } catch {
       return "unknown";
@@ -95,8 +95,10 @@ export async function detectPackageManager(): Promise<string> {
 
   for (const manager of managers) {
     try {
-      await $`command -v ${manager.cmd}`;
-      return manager.name;
+      const result = await execBashWithResult(`command -v ${manager.cmd}`);
+      if (result.success) {
+        return manager.name;
+      }
     } catch {
       continue;
     }
@@ -182,7 +184,7 @@ export async function isDebianBased(): Promise<boolean> {
  */
 export async function isWSL(): Promise<boolean> {
   try {
-    const version = await $`cat /proc/version`.text();
+    const version = await execBash("cat /proc/version");
     return version.toLowerCase().includes("microsoft") || version.toLowerCase().includes("wsl");
   } catch {
     return false;
@@ -194,8 +196,8 @@ export async function isWSL(): Promise<boolean> {
  */
 export async function checkNetworkConnection(url = "https://google.com"): Promise<boolean> {
   try {
-    await $`curl -sSf --connect-timeout 5 ${url}`;
-    return true;
+    const result = await execBashWithResult(`curl -sSf --connect-timeout 5 ${url}`);
+    return result.success;
   } catch {
     return false;
   }
@@ -206,8 +208,8 @@ export async function checkNetworkConnection(url = "https://google.com"): Promis
  */
 export async function verifyCommand(command: string): Promise<boolean> {
   try {
-    await $`command -v ${command}`;
-    return true;
+    const result = await execBashWithResult(`command -v ${command}`);
+    return result.success;
   } catch {
     return false;
   }
@@ -218,7 +220,7 @@ export async function verifyCommand(command: string): Promise<boolean> {
  */
 export async function getCommandVersion(command: string, versionFlag = "--version"): Promise<string> {
   try {
-    const output = await $`${command} ${versionFlag}`.text();
+    const output = await execBash(`${command} ${versionFlag}`);
     return output.trim();
   } catch (error) {
     throw new Error(`无法获取 ${command} 版本: ${error instanceof Error ? error.message : String(error)}`);
