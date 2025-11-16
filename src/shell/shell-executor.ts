@@ -29,6 +29,8 @@ export interface ShellExecOptions {
   env?: Record<string, string>;
   /** 是否静默执行（不抛出错误，默认 false） */
   silent?: boolean;
+  /** 超时时间（毫秒），0 表示无超时，默认 0 */
+  timeout?: number;
 }
 
 /**
@@ -59,7 +61,8 @@ async function _execShell(args: string[], options: ShellExecOptions = {}): Promi
     inheritStdio = false,
     cwd,
     env,
-    silent = false
+    silent = false,
+    timeout = 0
   } = options;
 
   const spawnOptions: any = {
@@ -78,13 +81,47 @@ async function _execShell(args: string[], options: ShellExecOptions = {}): Promi
 
   let stdout = '';
   let stderr = '';
+  let exitCode: number;
+  let timedOut = false;
 
-  if (captureOutput && !inheritStdio) {
-    stdout = await new Response(proc.stdout).text();
-    stderr = await new Response(proc.stderr).text();
+  try {
+    // 如果设置了超时，使用 Promise.race 来实现超时控制
+    if (timeout > 0) {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          timedOut = true;
+          proc.kill();
+          reject(new Error(`Command timed out after ${timeout}ms`));
+        }, timeout);
+      });
+
+      const execPromise = (async () => {
+        if (captureOutput && !inheritStdio) {
+          stdout = await new Response(proc.stdout).text();
+          stderr = await new Response(proc.stderr).text();
+        }
+        return await proc.exited;
+      })();
+
+      exitCode = await Promise.race([execPromise, timeoutPromise]);
+    } else {
+      // 无超时限制
+      if (captureOutput && !inheritStdio) {
+        stdout = await new Response(proc.stdout).text();
+        stderr = await new Response(proc.stderr).text();
+      }
+      exitCode = await proc.exited;
+    }
+  } catch (error) {
+    if (timedOut) {
+      if (!silent) {
+        throw new Error(`Command timed out after ${timeout}ms. Command: ${args.join(' ')}`);
+      }
+      return { exitCode: 124, stdout, stderr: 'Command timed out', success: false };
+    }
+    throw error;
   }
 
-  const exitCode = await proc.exited;
   const success = exitCode === 0;
 
   if (!success && !silent) {

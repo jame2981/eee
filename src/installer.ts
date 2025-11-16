@@ -7,6 +7,7 @@
 
 import { logger } from "@/logger";
 import { requireRoot, getSystemInfo } from "@/pkg-utils";
+import { installationDashboard } from "./ui/installation-dashboard";
 
 export interface EnvironmentConfig {
   name: string;                   // 环境名称，如 "开发环境"、"服务器环境"
@@ -20,6 +21,9 @@ export interface EnvironmentConfig {
  */
 export async function installEnvironment(config: EnvironmentConfig) {
   const { name, description, packages } = config;
+
+  // Start the installation dashboard
+  installationDashboard.start();
 
   logger.info(`🚀 开始安装${name}`);
   if (description) {
@@ -40,12 +44,24 @@ export async function installEnvironment(config: EnvironmentConfig) {
 
   logger.info("\\n⏳ 开始安装...");
 
+  // Add all packages to dashboard
+  packages.forEach(pkg => {
+    installationDashboard.addInstallation(pkg);
+  });
+
   // 依次安装每个包
   for (const [index, pkg] of packages.entries()) {
     const current = index + 1;
     const total = packages.length;
 
     logger.info(`\\n[${current}/${total}] 🔧 正在安装: ${pkg}`);
+
+    // Update dashboard
+    installationDashboard.updateInstallation(pkg, {
+      status: 'running',
+      currentStep: 'Starting installation',
+      progress: 0
+    });
 
     try {
       // 1. 如果存在 pre_install.ts，先执行它
@@ -54,6 +70,10 @@ export async function installEnvironment(config: EnvironmentConfig) {
         const preInstallFunction = preInstallModule.default;
 
         if (typeof preInstallFunction === 'function') {
+          installationDashboard.updateInstallation(pkg, {
+            currentStep: 'Installing dependencies',
+            progress: 20
+          });
           logger.info(`  ==> 执行 ${pkg} 依赖安装...`);
           await preInstallFunction();
         }
@@ -75,6 +95,11 @@ export async function installEnvironment(config: EnvironmentConfig) {
         throw new Error(`${pkg}/install.ts 没有导出默认函数`);
       }
 
+      installationDashboard.updateInstallation(pkg, {
+        currentStep: 'Main installation',
+        progress: 50
+      });
+
       await installFunction();
 
       // 如果存在 post_install.ts，也执行它
@@ -83,6 +108,10 @@ export async function installEnvironment(config: EnvironmentConfig) {
         const postInstallFunction = postInstallModule.default;
 
         if (typeof postInstallFunction === 'function') {
+          installationDashboard.updateInstallation(pkg, {
+            currentStep: 'Post-installation configuration',
+            progress: 80
+          });
           await postInstallFunction();
         }
       } catch (postError) {
@@ -94,13 +123,19 @@ export async function installEnvironment(config: EnvironmentConfig) {
         }
       }
 
+      installationDashboard.completeInstallation(pkg, true);
       logger.success(`✅ ${pkg} 安装完成`);
     } catch (error) {
+      installationDashboard.completeInstallation(pkg, false);
       logger.error(`❌ ${pkg} 安装失败:`, error);
       logger.error("后续安装已中止");
+      installationDashboard.stop();
       process.exit(1);
     }
   }
+
+  // Stop dashboard and show summary
+  installationDashboard.stop();
 
   logger.success(`\\n🎉 ${name}安装完成！`);
   logger.info("\\n💡 提示:");

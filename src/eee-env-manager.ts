@@ -81,6 +81,7 @@ export interface EeeEnvManagerConfig {
 
 export class EeeEnvManager {
   private user: string;
+  private userGroup: string;
   private userHome: string;
   private configPath: string;
   private config: EeeEnvManagerConfig;
@@ -89,6 +90,8 @@ export class EeeEnvManager {
   constructor(config?: EeeEnvManagerConfig) {
     this.user = getCurrentUser();
     this.userHome = getUserHome(this.user);
+    // 获取用户的真实主组（不假设组名等于用户名）
+    this.userGroup = ""; // 将在 init() 中异步获取
     this.config = {
       configPath: path.join(this.userHome, ".eee-env"),
       shellIntegration: {
@@ -97,12 +100,23 @@ export class EeeEnvManager {
         fish: false,
       },
       backup: {
-        enabled: true,
+        enabled: false,  // 默认关闭备份，初始化不需要备份
         maxBackups: 5,
       },
       ...config,
     };
     this.configPath = this.config.configPath!;
+  }
+
+  /**
+   * 初始化管理器（获取用户组信息）
+   */
+  private async init(): Promise<void> {
+    if (!this.userGroup) {
+      // 获取用户的真实主组
+      const { getUserPrimaryGroup } = await import("./pkg-utils");
+      this.userGroup = await getUserPrimaryGroup(this.user);
+    }
   }
 
   /**
@@ -170,18 +184,70 @@ export class EeeEnvManager {
   }
 
   /**
+   * 修复所有 EEE 相关文件的权限
+   * 用于修复之前以 root 运行留下的权限问题
+   * 确保幂等性：可以安全地重复运行
+   */
+  async fixAllPermissions(): Promise<void> {
+    logger.info("🔧 检查并修复 EEE 环境文件权限...");
+
+    const filesToFix: string[] = [];
+
+    // 修复主配置文件
+    await this.fixFileOwnership(this.configPath);
+    filesToFix.push(this.configPath);
+
+    // 查找并修复所有备份文件
+    try {
+      const backupPattern = `${this.configPath}.backup.*`;
+      const findBackupsScript = `ls ${backupPattern} 2>/dev/null || true`;
+      const backupsOutput = await execBash(findBackupsScript);
+
+      if (backupsOutput.trim()) {
+        const backupFiles = backupsOutput.trim().split('\n');
+        for (const backupFile of backupFiles) {
+          if (backupFile) {
+            await this.fixFileOwnership(backupFile);
+            filesToFix.push(backupFile);
+          }
+        }
+      }
+    } catch {
+      // 忽略查找备份文件的错误
+    }
+
+    // 修复 Shell 配置文件（如果需要）
+    const shellFiles = [
+      path.join(this.userHome, ".bashrc"),
+      path.join(this.userHome, ".zshrc"),
+    ];
+
+    for (const shellFile of shellFiles) {
+      await this.fixFileOwnership(shellFile);
+    }
+
+    logger.success(`✅ 权限检查完成，已处理 ${filesToFix.length} 个文件`);
+  }
+
+  /**
    * 生成并应用完整的环境配置
    * 核心功能：幂等的配置生成和应用
    */
   async applyConfiguration(): Promise<void> {
     logger.info("🚀 开始应用 EEE 环境配置...");
 
-    // 1. 备份当前配置
+    // 0. 初始化（获取用户组信息）
+    await this.init();
+
+    // 1. 修复权限（确保幂等性）
+    await this.fixAllPermissions();
+
+    // 2. 备份当前配置
     if (this.config.backup?.enabled) {
       await this.backupCurrentConfig();
     }
 
-    // 2. 解析依赖关系并排序模块
+    // 3. 解析依赖关系并排序模块
     const sortedModules = this.resolveDependencies();
 
     // 3. 生成合并配置
@@ -492,6 +558,11 @@ export class EeeEnvManager {
   /**
    * 幂等写入配置文件
    */
+  /**
+   * 写入配置文件（以正确的用户身份）
+   * 修复: 使用 runAsUserScript 确保文件由目标用户拥有
+   * 幂等性: 自动修复之前由 root 创建的文件权限
+   */
   private async writeConfigFile(content: string): Promise<void> {
     try {
       // 检查文件是否存在以及内容是否相同
@@ -502,13 +573,21 @@ export class EeeEnvManager {
         return;
       }
 
-      // 写入新内容
-      await Bun.write(this.configPath, content);
-      await this.setFilePermissions(this.configPath, "644");
+      // 修复文件权限（如果文件已存在但所有者不对）
+      await this.fixFileOwnership(this.configPath);
+
+      // 使用 here document 以目标用户身份写入文件
+      // 这确保文件由正确的用户拥有，而不是 root
+      const writeScript = `cat > "${this.configPath}" << 'EEEEOF'
+${content}
+EEEEOF
+chmod 644 "${this.configPath}"`;
+
+      await runAsUserScript(writeScript, this.user);
 
       logger.info(`✅ 配置文件已更新: ${this.configPath}`);
     } catch (error) {
-      logger.error(`❌ 写入配置文件失败: ${error.message}`);
+      logger.error(`❌ 写入配置文件失败: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -627,17 +706,28 @@ export class EeeEnvManager {
 
   /**
    * 追加内容到文件
+   * 修复: 使用 here document 避免特殊字符问题
    */
   private async appendToFile(filePath: string, content: string): Promise<void> {
-    const appendScript = `echo '${content}' >> "${filePath}"`;
+    const appendScript = `cat >> "${filePath}" << 'EEEEOF'
+${content}
+EEEEOF`;
     await runAsUserScript(appendScript, this.user);
   }
 
   /**
    * 确保文件存在
+   * 修复: 确保父目录存在并检查权限
    */
   private async ensureFileExists(filePath: string): Promise<void> {
-    const createScript = `touch "${filePath}"`;
+    const parentDir = path.dirname(filePath);
+    const createScript = `
+if [ ! -d "${parentDir}" ]; then
+  mkdir -p "${parentDir}"
+fi
+if [ ! -f "${filePath}" ]; then
+  touch "${filePath}"
+fi`;
     await runAsUserScript(createScript, this.user);
   }
 
@@ -665,6 +755,57 @@ export class EeeEnvManager {
   }
 
   /**
+   * 修复文件所有权
+   * 如果文件存在但所有者不是目标用户，自动修复
+   * 这确保了幂等性：即使之前以 root 运行，再次以普通用户运行也能成功
+   */
+  private async fixFileOwnership(filePath: string): Promise<void> {
+    try {
+      // 检查文件是否存在
+      const exists = await this.checkFileExists(filePath);
+      if (!exists) {
+        return; // 文件不存在，无需修复
+      }
+
+      // 获取文件当前所有者
+      const checkOwnerScript = `stat -c "%U" "${filePath}" 2>/dev/null || stat -f "%Su" "${filePath}" 2>/dev/null`;
+      const currentOwner = (await execBash(checkOwnerScript)).trim();
+
+      // 如果所有者不是目标用户，修复权限
+      if (currentOwner && currentOwner !== this.user) {
+        logger.warn(`⚠️  检测到 ${filePath} 所有者为 ${currentOwner}，正在修复为 ${this.user}:${this.userGroup}...`);
+
+        try {
+          // 使用真实的用户:组格式（不假设组名等于用户名）
+          await execCommand("sudo", ["chown", `${this.user}:${this.userGroup}`, filePath]);
+          logger.info(`✅ 已修复 ${filePath} 的所有权为 ${this.user}:${this.userGroup}`);
+        } catch (chownError) {
+          // 如果 sudo 失败，抛出带有解决方案的错误
+          const errorMsg = chownError instanceof Error ? chownError.message : String(chownError);
+
+          if (errorMsg.includes("password") || errorMsg.includes("terminal")) {
+            // sudo 需要密码
+            throw new Error(
+              `❌ 无法修复 ${filePath} 的权限（需要 sudo 密码）\n\n` +
+              `请先运行以下命令修复权限：\n` +
+              `  sudo chown ${this.user}:${this.userGroup} ${filePath}\n` +
+              `或使用修复脚本：\n` +
+              `  sudo ./fix-permissions.sh\n\n` +
+              `修复后即可正常运行。`
+            );
+          } else {
+            // 其他错误
+            throw new Error(`❌ 无法修复 ${filePath} 的权限: ${errorMsg}`);
+          }
+        }
+      }
+    } catch (error) {
+      // 重新抛出错误（不要静默处理）
+      throw error;
+    }
+  }
+
+  /**
    * 检查 Shell 集成状态
    */
   private async checkShellIntegration(shell: "bash" | "zsh"): Promise<boolean> {
@@ -686,6 +827,7 @@ export class EeeEnvManager {
 
   /**
    * 备份当前配置
+   * 修复: 确保备份文件也由正确的用户拥有
    */
   private async backupCurrentConfig(): Promise<void> {
     if (!await this.checkFileExists(this.configPath)) {
@@ -696,7 +838,10 @@ export class EeeEnvManager {
     const backupPath = `${this.configPath}.backup.${timestamp}`;
 
     try {
-      await execCommand("cp", [this.configPath, backupPath]);
+      // 使用目标用户身份创建备份
+      const backupScript = `cp "${this.configPath}" "${backupPath}"`;
+      await runAsUserScript(backupScript, this.user);
+
       logger.info(`📦 配置文件已备份: ${backupPath}`);
     } catch {
       // 忽略备份错误

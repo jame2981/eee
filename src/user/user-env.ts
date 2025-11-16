@@ -104,3 +104,39 @@ export async function addUserToGroup(user: string, group: string): Promise<void>
     throw error;
   }
 }
+
+/**
+ * 检查当前用户是否有 sudo 权限
+ * @returns true 如果有 sudo 权限，false 否则
+ */
+export async function hasSudoPermission(): Promise<boolean> {
+  try {
+    // 尝试运行一个简单的 sudo 命令（-n 表示非交互模式）
+    await execBash("sudo -n true 2>/dev/null");
+    return true;
+  } catch {
+    // 如果失败，可能是没有 sudo 权限或需要密码
+    // 再尝试检查用户是否在 sudo 组中
+    try {
+      const groups = await execBash("groups");
+      return groups.includes("sudo") || groups.includes("wheel") || groups.includes("admin");
+    } catch {
+      return false;
+    }
+  }
+}
+
+/**
+ * 要求用户必须有 sudo 权限
+ * 如果没有 sudo 权限，则抛出错误
+ */
+export async function requireSudo(): Promise<void> {
+  const hasSudo = await hasSudoPermission();
+  if (!hasSudo) {
+    logger.error("❌ 此操作需要 sudo 权限，请确保：");
+    logger.error("   1. 当前用户在 sudo/wheel/admin 组中");
+    logger.error("   2. /etc/sudoers 配置正确");
+    logger.error("   3. 使用 'sudo' 运行此命令");
+    throw new Error("需要 sudo 权限");
+  }
+}

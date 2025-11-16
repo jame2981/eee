@@ -32,10 +32,14 @@ export default async function preInstall(): Promise<void> {
   logger.info(`==> 为用户 ${currentUser} 安装 UV 到 ${userHome}`);
 
   try {
-    // 检查 UV 是否已经安装
-    const uvExists = await isCommandAvailable("uv");
+    // 检查 UV 是否已经安装（在可能的安装路径中检查）
+    const uvCheckScript = `
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+command -v uv >/dev/null 2>&1 && echo "installed" || echo "not_installed"
+`;
+    const uvCheckResult = await runAsUserScript(uvCheckScript, currentUser);
 
-    if (uvExists) {
+    if (uvCheckResult.trim() === "installed") {
       logger.success("✅ UV 已安装，跳过安装步骤");
       return;
     }
@@ -46,9 +50,10 @@ export default async function preInstall(): Promise<void> {
 
     const uvInstallScript = `set -e
 echo "==> 开始安装 UV"
+echo "==> 下载 UV 安装脚本（最长等待 5 分钟）..."
 
-# 下载并安装 UV
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# 下载并安装 UV（显示进度，5分钟超时）
+curl -Lf --max-time 300 --progress-bar https://astral.sh/uv/install.sh | sh
 
 echo "==> UV 安装脚本执行完成"`;
 

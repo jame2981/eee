@@ -19,7 +19,8 @@
 import { logger } from "./logger";
 import { withStep } from "./logging-utils";
 import { ShellScriptBuilder } from "./shell-script-builder";
-import { runAsUserScript, getCurrentUser, getUserHome } from "./user/user-env";
+import { getCurrentUser, getUserHome } from "./user/user-env";
+import { runAsUserScript } from "./shell/script-executor";
 import { initializeEeeEnv, addEnvironmentVariable, insertPath, addSource } from "./env-utils";
 
 /**

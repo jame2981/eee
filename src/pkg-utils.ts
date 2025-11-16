@@ -26,6 +26,8 @@ import {
   isRoot as _internalIsRoot,
   requireRoot as _internalRequireRoot,
   addUserToGroup as _internalAddUserToGroup,
+  hasSudoPermission as _internalHasSudoPermission,
+  requireSudo as _internalRequireSudo,
 } from "./user/user-env";
 
 // 导入脚本执行函数（内部使用）
@@ -75,6 +77,8 @@ export {
   _internalIsRoot as isRoot,
   _internalRequireRoot as requireRoot,
   _internalAddUserToGroup as addUserToGroup,
+  _internalHasSudoPermission as hasSudoPermission,
+  _internalRequireSudo as requireSudo,
 };
 
 // 脚本执行（重新导出）
@@ -221,25 +225,30 @@ export async function reloadEnv(user?: string): Promise<void> {
 
 /**
  * 创建用户文件
+ * 修复: 直接以目标用户身份创建文件，避免竞态条件
  */
 export async function writeUserFile(path: string, content: string, user?: string): Promise<void> {
   const targetUser = user || _internalGetCurrentUser();
 
-  await Bun.write(path, content);
-  await setUserOwnership(path, targetUser);
+  // 使用 here document 以目标用户身份创建文件
+  const writeScript = `cat > "${path}" << 'EEEEOF'
+${content}
+EEEEOF`;
 
+  await _internalRunAsUserScript(writeScript, targetUser);
   logger.info(`==> 创建用户文件: ${path}`);
 }
 
 /**
  * 创建用户目录
+ * 修复: 直接以目标用户身份创建目录，避免竞态条件
  */
 export async function createUserDir(path: string, user?: string, mode = "755"): Promise<void> {
   const targetUser = user || _internalGetCurrentUser();
 
-  await execCommand("mkdir", ["-p", path]);
-  await execCommand("chmod", [mode, path]);
-  await setUserOwnership(path, targetUser);
+  // 使用目标用户身份创建目录并设置权限
+  const createScript = `mkdir -p "${path}" && chmod ${mode} "${path}"`;
+  await _internalRunAsUserScript(createScript, targetUser);
 
   logger.info(`==> 创建用户目录: ${path}`);
 }
@@ -429,41 +438,85 @@ export async function writeConfigTemplate(
 
 // ========== 9. 下载和安装 ==========
 
+import {
+  downloadFile as _downloadFileNew,
+  downloadAndInstall as _downloadAndInstallNew,
+  downloadGithubRelease as _downloadGithubReleaseNew,
+  smartDownload as _smartDownloadNew,
+  type DownloadOptions
+} from "./network/download-utils";
+
 /**
- * 下载文件
+ * 下载文件（新版本，带超时和重试）
+ *
+ * @param url 下载 URL
+ * @param dest 目标文件路径（可选）
+ * @param options 下载选项
  */
-export async function downloadFile(url: string, dest?: string): Promise<string> {
+export async function downloadFile(
+  url: string,
+  dest?: string,
+  options?: DownloadOptions
+): Promise<string> {
   if (dest) {
     logger.info(`==> 下载文件: ${url} -> ${dest}`);
-    await execCommand("curl", ["-fsSL", url, "-o", dest]);
-    return dest;
+    return await _downloadFileNew(url, { ...options, output: dest });
   } else {
-    return await execCommand("curl", ["-fsSL", url]);
+    return await _downloadFileNew(url, options);
   }
+}
+
+/**
+ * 下载 GitHub Release 资源
+ */
+export async function downloadGithubRelease(
+  repo: string,
+  tag: string,
+  asset: string,
+  dest?: string,
+  options?: DownloadOptions
+): Promise<string> {
+  return await _downloadGithubReleaseNew(repo, tag, asset, {
+    ...options,
+    output: dest
+  });
 }
 
 /**
  * 下载并执行脚本
  */
-export async function downloadAndRunScript(url: string, user?: string): Promise<string> {
+export async function downloadAndRunScript(url: string, user?: string, options?: DownloadOptions): Promise<string> {
   logger.info(`==> 下载并执行脚本: ${url}`);
 
-  const script = await downloadFile(url);
+  const script = await downloadFile(url, undefined, options);
   return await _internalRunAsUserScript(script, user);
 }
 
 /**
- * 使用 curl 安装（常见的安装模式）
+ * 使用 curl 安装（常见的 curl | bash 安装模式）
+ * 新版本：带超时和重试
  */
-export async function curlInstall(url: string, user?: string): Promise<void> {
+export async function curlInstall(
+  url: string,
+  user?: string,
+  options?: DownloadOptions
+): Promise<void> {
   const targetUser = user || _internalGetCurrentUser();
 
   logger.info(`==> Curl 安装: ${url}`);
 
-  if (targetUser === "root") {
-    await execBash(`curl -fsSL ${url} | bash`);
-  } else {
-    await execBash(`sudo -u ${targetUser} bash -c "curl -fsSL ${url} | bash"`);
+  try {
+    // 使用新的下载工具，带超时和重试
+    const script = await downloadFile(url, undefined, {
+      timeout: 600,  // 默认 10 分钟超时
+      maxRetries: 3,
+      ...options
+    });
+
+    // 执行脚本
+    await _internalRunAsUserScript(script, targetUser);
+  } catch (error) {
+    throw new Error(`Curl 安装失败: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -621,6 +674,8 @@ export async function installPackagesWithFallback(
 }
 
 // ========== 重新导出常用模块 ==========
+
+export { type DownloadOptions } from "./network/download-utils";
 
 // ========== 12. 包状态检查功能 ==========
 // isPackageInstalled 已迁移到 src/package/apt.ts
@@ -867,7 +922,7 @@ export async function configureZshIntegration(currentUser: string): Promise<void
       const result = await _internalRunAsUserScript("command -v zsh", currentUser);
       return result.trim().length > 0;
     },
-    () => false
+    async () => false
   );
 
   if (!zshExists) {
@@ -881,7 +936,7 @@ export async function configureZshIntegration(currentUser: string): Promise<void
       await _internalRunAsUserScript(`test -f "${zshrcPath}"`, currentUser);
       return true;
     },
-    () => false
+    async () => false
   );
 
   if (!zshrcExists) {
@@ -905,14 +960,14 @@ fi`;
     return;
   }
 
-  // 添加 source 命令到 .zshrc
-  const sourceCommand = `
+  // 添加 source 命令到 .zshrc（使用 here document 避免特殊字符问题）
+  const appendScript = `cat >> "${zshrcPath}" << 'EEEEOF'
+
 # EEE Development Environment
 if [ -f "$HOME/.eee-env" ]; then
   source "$HOME/.eee-env"
-fi`;
-
-  const appendScript = `echo '${sourceCommand}' >> "${zshrcPath}"`;
+fi
+EEEEOF`;
   await _internalRunAsUserScript(appendScript, currentUser);
 
   logger.success("✅ ZSH 已配置加载 ~/.eee-env");

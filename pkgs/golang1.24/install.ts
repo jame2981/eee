@@ -19,7 +19,9 @@ import {
   getCommandVersion,
   writeUserFile,
   tryExecute,
-  logger
+  downloadGithubRelease,
+  logger,
+  type DownloadOptions
 } from "../../src/pkg-utils";
 
 import {
@@ -43,34 +45,48 @@ export default async function install(): Promise<void> {
     logger.info("==> 安装 goup (Go 版本管理器)...");
 
     if (!await testUserCommand("goup", currentUser)) {
-      // 手动安装goup，绕过官方脚本的TTY检查
-      const goupInstallScript = `#!/bin/bash
-# 设置非交互式环境
-export DEBIAN_FRONTEND=noninteractive
+      // 使用新的下载工具安装 goup，带超时和重试
+      logger.info("==> 下载 goup 二进制文件...");
 
-echo "开始手动安装 goup..."
+      const goupBinPath = `${goupRoot}/bin/goup`;
 
-# 创建 goup 目录
-mkdir -p "$HOME/.go/bin"
+      // 创建目录
+      await createUserDir(`${goupRoot}/bin`, currentUser);
 
-# 直接下载 goup 二进制文件
-echo "下载 goup v0.7.0 for linux-amd64..."
-curl -L "https://github.com/owenthereal/goup/releases/download/v0.7.0/linux-amd64" -o "$HOME/.go/bin/goup"
+      // 使用新的 downloadGithubRelease 函数，带超时和重试
+      try {
+        const tmpFile = `/tmp/goup-${Date.now()}`;
+        await downloadGithubRelease(
+          "owenthereal/goup",
+          "v0.7.0",
+          "linux-amd64",
+          tmpFile,
+          {
+            timeout: 120,  // 2 分钟超时
+            maxRetries: 3,
+            showProgress: true
+          }
+        );
 
-# 设置执行权限
-chmod +x "$HOME/.go/bin/goup"
+        // 移动到目标位置并设置权限（以用户身份）
+        const installScript = `
+mv "${tmpFile}" "${goupBinPath}"
+chmod +x "${goupBinPath}"
 
 # 验证下载成功
-if [ -f "$HOME/.go/bin/goup" ] && [ -x "$HOME/.go/bin/goup" ]; then
+if [ -f "${goupBinPath}" ] && [ -x "${goupBinPath}" ]; then
   echo "✅ goup 二进制文件下载并安装成功"
-  echo "goup 路径: $HOME/.go/bin/goup"
-  echo "文件大小: $(ls -lh $HOME/.go/bin/goup | awk '{print $5}')"
+  echo "goup 路径: ${goupBinPath}"
+  echo "文件大小: $(ls -lh ${goupBinPath} | awk '{print $5}')"
 else
   echo "❌ goup 安装失败"
   exit 1
 fi`;
 
-      await runAsUserScript(goupInstallScript, currentUser);
+        await runAsUserScript(installScript, currentUser);
+      } catch (error) {
+        throw new Error(`goup 下载失败: ${error instanceof Error ? error.message : String(error)}\n提示: 检查网络连接或使用代理`);
+      }
 
       // 添加 goup 环境变量到 .bashrc
       const goupEnvContent = `# goup Go version manager

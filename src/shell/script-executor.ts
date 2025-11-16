@@ -12,20 +12,27 @@ import { execBash, execCommand } from "./shell-executor";
 
 /**
  * 以指定用户身份执行命令
+ * 修复: 正确检测实际用户身份，避免权限问题
  */
 export async function runAsUser(command: string, user?: string): Promise<string> {
   const targetUser = user || getCurrentUser();
 
-  if (targetUser === "root") {
+  // 获取实际的当前用户（不依赖环境变量）
+  const actualCurrentUser = (await execCommand("id", ["-un"])).trim();
+
+  // 如果目标用户就是实际当前用户，直接执行
+  if (targetUser === actualCurrentUser) {
     return await execBash(command);
   }
 
+  // 需要切换用户身份
   return await execBash(`sudo -u ${targetUser} ${command}`);
 }
 
 /**
  * 以指定用户身份执行脚本
  * 修复: 使用 here document 避免引用问题，增加调试日志
+ * 修复: 正确检测实际用户身份，避免权限问题
  */
 export async function runAsUserScript(script: string, user?: string): Promise<string> {
   const targetUser = user || getCurrentUser();
@@ -42,24 +49,35 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
     let result: string;
     let stderr: string = "";
 
-    // 将脚本写入临时文件
-    const tmpFile = `/tmp/script-${Date.now()}.sh`;
+    // 将脚本写入临时文件（使用更安全的路径）
+    const tmpFile = `/tmp/eee-script-${Date.now()}-${Math.random().toString(36).substring(7)}.sh`;
     await Bun.write(tmpFile, script);
 
-    // 设置可执行权限
-    await execCommand("chmod", ["+x", tmpFile]);
+    // 设置权限为 755 (rwxr-xr-x)，确保其他用户可以读取和执行
+    // 这对于 sudo -u 切换用户执行非常重要
+    await execCommand("chmod", ["755", tmpFile]);
 
     try {
-      if (targetUser === "root") {
-        logger.debug("以root用户执行脚本");
+      // 获取实际的当前用户（不依赖环境变量）
+      const actualCurrentUser = (await execCommand("id", ["-un"])).trim();
+      logger.debug(`runAsUserScript - 实际当前用户: ${actualCurrentUser}`);
+
+      // 如果目标用户就是实际当前用户，直接执行
+      if (targetUser === actualCurrentUser) {
+        logger.debug(`目标用户与当前用户相同 (${targetUser})，直接执行脚本`);
         result = await execCommand("bash", [tmpFile]);
       } else {
-        logger.debug(`以sudo -u ${targetUser}执行脚本`);
+        // 需要切换用户身份
+        logger.debug(`切换到用户 ${targetUser} 执行脚本 (当前用户: ${actualCurrentUser})`);
         result = await execCommand("sudo", ["-u", targetUser, "bash", tmpFile]);
       }
     } finally {
-      // 清理临时文件
-      await execCommand("rm", ["-f", tmpFile]);
+      // 清理临时文件（确保删除，即使权限发生变化）
+      try {
+        await execCommand("rm", ["-f", tmpFile]);
+      } catch (cleanupError) {
+        logger.debug(`清理临时文件失败: ${tmpFile}`);
+      }
     }
 
     logger.debug(`runAsUserScript - 脚本执行成功，输出长度: ${result.length} 字符`);
@@ -87,7 +105,7 @@ export async function runAsUserScript(script: string, user?: string): Promise<st
     // 提取并显示标准错误输出
     if (error instanceof Error && error.message.includes('stderr:')) {
       const stderrMatch = error.message.match(/stderr: (.+)/);
-      if (stderrMatch) {
+      if (stderrMatch && stderrMatch[1]) {
         logger.debug(`runAsUserScript - 标准错误输出:`);
         stderrMatch[1].split('\n').forEach(line => {
           if (line.trim()) {
@@ -127,20 +145,24 @@ export async function runAsRootScript(script: string): Promise<string> {
   logger.debug("以 sudo 提升权限执行脚本");
 
   try {
-    // 将脚本写入临时文件
-    const tmpFile = `/tmp/root-script-${Date.now()}.sh`;
+    // 将脚本写入临时文件（使用更安全的路径）
+    const tmpFile = `/tmp/eee-root-script-${Date.now()}-${Math.random().toString(36).substring(7)}.sh`;
     await Bun.write(tmpFile, script);
 
-    // 设置可执行权限
-    await execCommand("chmod", ["+x", tmpFile]);
+    // 设置权限为 755，确保 sudo 可以读取和执行
+    await execCommand("chmod", ["755", tmpFile]);
 
     let result: string;
     try {
       // 使用 sudo 执行脚本
       result = await execBash(`sudo bash ${tmpFile}`);
     } finally {
-      // 清理临时文件
-      await execCommand("sudo", ["rm", "-f", tmpFile]);
+      // 清理临时文件（确保删除）
+      try {
+        await execCommand("sudo", ["rm", "-f", tmpFile]);
+      } catch (cleanupError) {
+        logger.debug(`清理临时文件失败: ${tmpFile}`);
+      }
     }
 
     logger.debug(`runAsRootScript - 脚本执行成功，输出长度: ${result.length} 字符`);
