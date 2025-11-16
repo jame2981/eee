@@ -1,0 +1,23 @@
+{
+  "proxy": {
+    "enabled": true,
+    "http": "http://proxy.example.com:8080",
+    "https": "http://proxy.example.com:8080",
+    "ftp": "http://proxy.example.com:8080",
+    "noProxy": [
+      "localhost",
+      "127.0.0.1",
+      "*.local",
+      "*.internal"
+    ]
+  },
+  "github": {
+    "preferredMirrors": [
+      "gitee",
+      "fastgit",
+      "github"
+    ],
+    "timeout": 15,
+    "retryCount": 3
+  }
+}
